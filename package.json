@@ -1,10 +1,18 @@
 {
-  "name": "local-app",
+  "name": "vox-local",
   "version": "1.0.0",
-  "description": "An Electron application with React",
+  "description": "Open-source local-model desktop app for Vox",
   "main": "./out/main/index.js",
-  "author": "example.com",
-  "homepage": "https://electron-vite.org",
+  "author": "Arnav Gupta",
+  "license": "MIT",
+  "homepage": "https://www.vox-ai.chat",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/info-arnav/vox-local.git"
+  },
+  "bugs": {
+    "url": "https://github.com/info-arnav/vox-local/issues"
+  },
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",
