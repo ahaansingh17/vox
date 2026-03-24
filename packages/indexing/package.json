@@ -1,6 +1,6 @@
 {
-  "name": "@info-arnav/vox-indexing",
-  "version": "1.0.1",
+  "name": "@vox-ai-app/vox-indexing",
+  "version": "1.0.0",
   "type": "module",
   "license": "MIT",
   "description": "Local file indexing, full-text search, and document parsing for Vox",
@@ -13,19 +13,19 @@
     "./files": "./src/ingest/files.js",
     "./parser": "./src/parser/pool.js",
     "./parser/worker": "./src/parser/worker.js",
-    "./parser/docx": "./src/parser/parsers/docx.js",
     "./process": "./src/process/host.js",
     "./process/entry": "./src/process/process.js",
     "./ipc": "./src/runtime/ipc.js",
-    "./logger": "./src/logger.js",
-    "./sentry": "./src/sentry.js"
+    "./logger": "./src/telemetry/logger.js",
+    "./sentry": "./src/telemetry/sentry.js"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/info-arnav/vox"
+    "url": "https://github.com/vox-ai-app/vox"
   },
   "files": [
     "src",
@@ -36,8 +36,7 @@
     "electron": ">=28.0.0"
   },
   "dependencies": {
-    "better-sqlite3": "^12.0.0",
-    "unpdf": "^1.4.0",
-    "adm-zip": "^0.5.16"
+    "@vox-ai-app/vox-parser": "^1.0.0",
+    "better-sqlite3": "^12.0.0"
   }
 }

@@ -1,6 +1,6 @@
 {
-  "name": "@info-arnav/vox-ui",
-  "version": "1.0.1",
+  "name": "@vox-ai-app/vox-ui",
+  "version": "1.0.0",
   "type": "module",
   "license": "MIT",
   "description": "Shared UI components for the Vox design system",
@@ -18,7 +18,8 @@
     "./tokens.css": "./src/tokens/tokens.css"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
+    "access": "public",
+    "registry": "https://registry.npmjs.org",
     "main": "./dist/index.js",
     "module": "./dist/index.js",
     "exports": {
@@ -35,7 +36,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/info-arnav/vox"
+    "url": "https://github.com/vox-ai-app/vox"
   },
   "files": [
     "dist",

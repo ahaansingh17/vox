@@ -1,5 +1,5 @@
 import { INDEX_ENGINE_VERSION } from '../runtime/core/constants.js'
-import { getKnowledgeDb, indexingDbState } from './state.js'
+import { getKnowledgeDb, indexingDbState } from './prepared.js'
 const INDEX_ENGINE_VERSION_KEY = 'index.engine.version'
 const clearIndexTables = () => {
   getKnowledgeDb().exec(`

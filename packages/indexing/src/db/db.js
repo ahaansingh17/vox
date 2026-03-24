@@ -27,7 +27,7 @@ import {
   dbUpsertPending
 } from './entries.js'
 import { prepareKnowledgeDb } from './schema.js'
-import { indexingDbState, resetKnowledgeDbState } from './state.js'
+import { indexingDbState, resetKnowledgeDbState } from './prepared.js'
 const resolveKnowledgeDbDirectory = () => {
   const userDataPath = String(process.env.VOX_USER_DATA_PATH || '').trim()
   if (!userDataPath) {

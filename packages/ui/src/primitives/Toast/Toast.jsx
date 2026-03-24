@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 
-let _seq = 0
-const nextId = () => `toast-${++_seq}`
-
 function SingleToast({ toast, onDismiss }) {
   const [exiting, setExiting] = useState(false)
   const timerRef = useRef(null)
@@ -28,21 +25,6 @@ function SingleToast({ toast, onDismiss }) {
       <span className="app-toast-bar" />
     </div>
   )
-}
-
-export function useToast() {
-  const [toasts, setToasts] = useState([])
-
-  const push = useCallback((message, type = 'error') => {
-    const id = nextId()
-    setToasts((current) => [...current, { id, type, message }])
-  }, [])
-
-  const dismiss = useCallback((id) => {
-    setToasts((current) => current.filter((t) => t.id !== id))
-  }, [])
-
-  return { toasts, push, dismiss }
 }
 
 export default function ToastLayer({ toasts = [], onDismiss }) {

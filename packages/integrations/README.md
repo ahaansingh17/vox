@@ -1,4 +1,4 @@
-# @info-arnav/vox-integrations
+# @vox-ai-app/vox-integrations
 
 macOS system integrations for Vox: Apple Mail, Screen control, and iMessage. Each integration ships with tool implementations and LLM tool definitions.
 
@@ -7,21 +7,23 @@ Requires macOS. Each integration needs specific system permissions granted by th
 ## Install
 
 ```sh
-npm install @info-arnav/vox-integrations
+npm install @vox-ai-app/vox-integrations
 ```
 
 Peer dependency: `electron >= 28`
 
-## Packages
+## Exports
 
-| Export                                          | Contents                      |
-| ----------------------------------------------- | ----------------------------- |
-| `@info-arnav/vox-integrations`                  | All exports                   |
-| `@info-arnav/vox-integrations/defs`             | All tool definitions          |
-| `@info-arnav/vox-integrations/mail`             | Mail functions                |
-| `@info-arnav/vox-integrations/screen`           | Screen capture + control      |
-| `@info-arnav/vox-integrations/imessage`         | iMessage data, reply, service |
-| `@info-arnav/vox-integrations/imessage/service` | Poll-loop watcher factory     |
+| Export                                        | Contents                      |
+| --------------------------------------------- | ----------------------------- |
+| `@vox-ai-app/vox-integrations`                | All exports                   |
+| `@vox-ai-app/vox-integrations/defs`           | All tool definitions          |
+| `@vox-ai-app/vox-integrations/mail`           | Mail functions                |
+| `@vox-ai-app/vox-integrations/screen`         | Screen capture + control      |
+| `@vox-ai-app/vox-integrations/screen/capture` | Capture only                  |
+| `@vox-ai-app/vox-integrations/screen/control` | Control only                  |
+| `@vox-ai-app/vox-integrations/screen/queue`   | Session acquire/release       |
+| `@vox-ai-app/vox-integrations/imessage`       | iMessage data, reply, service |
 
 ## Mail
 
@@ -33,7 +35,7 @@ import {
   readEmails,
   searchContacts,
   replyToEmail
-} from '@info-arnav/vox-integrations/mail'
+} from '@vox-ai-app/vox-integrations/mail'
 
 const emails = await readEmails({ account: 'Work', folder: 'INBOX', limit: 20 })
 await sendEmail({ to: 'user@example.com', subject: 'Hi', body: 'Hello.' })
@@ -43,7 +45,7 @@ await replyToEmail({ messageId: '...', body: 'Thanks!' })
 Tool definitions:
 
 ```js
-import { MAIL_TOOL_DEFINITIONS } from '@info-arnav/vox-integrations/defs'
+import { MAIL_TOOL_DEFINITIONS } from '@vox-ai-app/vox-integrations/defs'
 ```
 
 ## Screen
@@ -56,8 +58,8 @@ import {
   clickAt,
   typeText,
   getUiElements
-} from '@info-arnav/vox-integrations/screen'
-import { acquireScreen, releaseScreen } from '@info-arnav/vox-integrations/screen/queue'
+} from '@vox-ai-app/vox-integrations/screen'
+import { acquireScreen, releaseScreen } from '@vox-ai-app/vox-integrations/screen/queue'
 
 const session = await acquireScreen()
 try {
@@ -72,7 +74,7 @@ try {
 Tool definitions:
 
 ```js
-import { SCREEN_TOOL_DEFINITIONS } from '@info-arnav/vox-integrations/defs'
+import { SCREEN_TOOL_DEFINITIONS } from '@vox-ai-app/vox-integrations/defs'
 ```
 
 ## iMessage
@@ -82,7 +84,7 @@ Requires **Full Disk Access** (System Settings → Privacy & Security → Full D
 ### Tool use (read conversations, send messages)
 
 ```js
-import { listConversations, listContacts, sendReply } from '@info-arnav/vox-integrations/imessage'
+import { listConversations, listContacts, sendReply } from '@vox-ai-app/vox-integrations/imessage'
 
 const conversations = listConversations()
 const contacts = listContacts()
@@ -92,7 +94,7 @@ await sendReply('+15551234567', 'Hello from Vox!')
 ### Gateway service (AI replies to incoming iMessages)
 
 ```js
-import { createIMessageService } from '@info-arnav/vox-integrations/imessage/service'
+import { createIMessageService } from '@vox-ai-app/vox-integrations/imessage'
 
 const svc = createIMessageService({
   logger,
@@ -110,12 +112,12 @@ svc.start('my-passphrase')
 // user sends "my-passphrase\nWhat's the weather?" → AI replies back
 ```
 
-`onMessage` must return a `Promise<string | null>`. Returning `null` skips the reply. The service handles the 3-second poll loop and 90-second response timeout internally.
+`onMessage` must return a `Promise<string | null>`. Returning `null` skips the reply.
 
 Tool definitions:
 
 ```js
-import { IMESSAGE_TOOL_DEFINITIONS } from '@info-arnav/vox-integrations/defs'
+import { IMESSAGE_TOOL_DEFINITIONS } from '@vox-ai-app/vox-integrations/defs'
 ```
 
 ## License

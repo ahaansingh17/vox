@@ -1,11 +1,11 @@
-# @info-arnav/vox-indexing
+# @vox-ai-app/vox-indexing
 
 Local file indexing, full-text search, and document parsing for Vox. Runs in a separate Electron utility process to keep the main process responsive.
 
 ## Install
 
 ```sh
-npm install @info-arnav/vox-indexing
+npm install @vox-ai-app/vox-indexing
 ```
 
 Peer dependency: `electron >= 28`
@@ -28,7 +28,7 @@ import {
   getIndexingStatus,
   setLogger,
   setSentryCapture
-} from '@info-arnav/vox-indexing'
+} from '@vox-ai-app/vox-indexing'
 
 setLogger(logger)
 setSentryCapture(captureException)
@@ -77,7 +77,7 @@ getIndexingStatus() // current status + progress
 For Electron apps that expose indexing over IPC:
 
 ```js
-import { registerIndexingIpc } from '@info-arnav/vox-indexing/ipc'
+import { registerIndexingIpc } from '@vox-ai-app/vox-indexing/ipc'
 
 registerIndexingIpc()
 // Registers: indexing:get-folders, indexing:add-folder, indexing:remove-folder,
@@ -101,8 +101,8 @@ export default {
       rollupOptions: {
         input: {
           index: 'src/main/index.js',
-          'indexing.process': 'node_modules/@info-arnav/vox-indexing/src/process/process.js',
-          'indexing.parser.worker': 'node_modules/@info-arnav/vox-indexing/src/parser/worker.js'
+          'indexing.process': 'node_modules/@vox-ai-app/vox-indexing/src/process/process.js',
+          'indexing.parser.worker': 'node_modules/@vox-ai-app/vox-indexing/src/parser/worker.js'
         }
       }
     }

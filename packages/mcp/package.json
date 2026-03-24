@@ -1,6 +1,6 @@
 {
-  "name": "@info-arnav/vox-mcp",
-  "version": "1.0.1",
+  "name": "@vox-ai-app/vox-mcp",
+  "version": "1.0.0",
   "type": "module",
   "license": "MIT",
   "description": "MCP (Model Context Protocol) client for Vox — connect to stdio, SSE, and HTTP servers",
@@ -11,11 +11,12 @@
     "./client": "./src/client.js"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/info-arnav/vox"
+    "url": "https://github.com/vox-ai-app/vox"
   },
   "files": [
     "src",

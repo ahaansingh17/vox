@@ -4,7 +4,7 @@ import { dbLoadEntriesByPathPrefix, openKnowledgeDb } from '../../db/db.js'
 import { IGNORED_DIRECTORIES } from '../../runtime/core/constants.js'
 import { detectFileKind, isUnchangedFile } from '../../ingest/files.js'
 import { state } from '../../runtime/core/state.js'
-import { isInsideOrSamePath } from '../../runtime/core/utils.js'
+import { isSameOrNestedPath } from '../../runtime/core/utils.js'
 import { sweepDeletedIndexedPaths } from '../../runtime/sync/cleanup.js'
 import {
   collectDirectChildNames,
@@ -24,7 +24,7 @@ export const getIndexedChildren = async (payload) => {
   const normalizedBasePath = requestedBasePath
     ? path.resolve(requestedBasePath)
     : normalizedFolderPath
-  if (!isInsideOrSamePath(normalizedBasePath, normalizedFolderPath)) {
+  if (!isSameOrNestedPath(normalizedFolderPath, normalizedBasePath)) {
     throw new Error('Base path must be inside the selected folder.')
   }
   await sweepDeletedIndexedPaths(normalizedBasePath)

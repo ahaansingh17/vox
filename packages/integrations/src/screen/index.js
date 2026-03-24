@@ -1,4 +1,4 @@
-export { captureFullScreen, captureRegion, waitForScreenPermission } from './capture.js'
+export { captureFullScreen, captureRegion, waitForScreenPermission } from './capture/index.js'
 export {
   clickAt,
   moveMouse,
@@ -13,5 +13,5 @@ export {
   focusApp,
   launchApp,
   listApps
-} from './control.js'
+} from './control/index.js'
 export { enqueueScreen, acquireScreen, releaseScreen, getScreenSession } from './queue.js'

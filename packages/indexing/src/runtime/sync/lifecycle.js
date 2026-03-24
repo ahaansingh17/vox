@@ -4,7 +4,8 @@ import { ensureIndexMetadataLoaded } from '../../db/metadata.js'
 import { cloneStatus, state } from '../core/state.js'
 import { RECONCILE_DEBOUNCE_MS } from '../core/constants.js'
 import { kickPendingDeleteDrain } from './cleanup.js'
-import { getStoredTrackedFolders, isSameOrNestedPath } from '../tracking/folders.js'
+import { getStoredTrackedFolders } from '../tracking/folders.js'
+import { isSameOrNestedPath } from '../core/utils.js'
 import {
   cancelIndexingReconcile,
   clearIndexingReconcileRuntime,

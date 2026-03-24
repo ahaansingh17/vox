@@ -1,6 +1,6 @@
 {
-  "name": "@info-arnav/vox-tools",
-  "version": "1.0.2",
+  "name": "@vox-ai-app/vox-tools",
+  "version": "1.0.0",
   "type": "module",
   "license": "MIT",
   "description": "Tool infrastructure, builtins, docs, and definitions for Vox",
@@ -8,32 +8,18 @@
   "private": false,
   "exports": {
     ".": "./src/index.js",
-    "./schema": "./src/schema.js",
-    "./network": "./src/network.js",
-    "./exec": "./src/exec.js",
-    "./registry": "./src/registry.js",
-    "./builtins": "./src/builtins/index.js",
-    "./builtins/fs": "./src/builtins/fs.js",
-    "./builtins/shell": "./src/builtins/shell.js",
-    "./builtins/fetch": "./src/builtins/fetch.js",
-    "./docs": "./src/docs/index.js",
-    "./docs/utils": "./src/docs/utils.js",
-    "./docs/word": "./src/docs/word.js",
-    "./docs/pdf": "./src/docs/pdf.js",
-    "./docs/pptx": "./src/docs/pptx.js",
-    "./defs": "./src/defs/index.js",
-    "./defs/fs": "./src/defs/fs.js",
-    "./defs/word": "./src/defs/word.js",
-    "./defs/pdf": "./src/defs/pdf.js",
-    "./defs/pptx": "./src/defs/pptx.js",
-    "./defs/knowledge": "./src/defs/knowledge.js"
+    "./exec": "./src/core/exec.js",
+    "./registry": "./src/core/registry.js",
+    "./schema": "./src/core/schema.js",
+    "./network": "./src/core/network.js"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/info-arnav/vox"
+    "url": "https://github.com/vox-ai-app/vox"
   },
   "files": [
     "src",
@@ -44,7 +30,8 @@
     "electron": ">=28.0.0"
   },
   "dependencies": {
-    "@info-arnav/vox-mcp": "^1.0.0",
+    "@vox-ai-app/vox-mcp": "^1.0.0",
+    "@vox-ai-app/vox-parser": "^1.0.0",
     "docx": "^9.6.0",
     "html-to-text": "^9.0.5",
     "pdf-lib": "^1.17.1",

@@ -1,10 +1,16 @@
 import path from 'node:path'
-import { clearKnowledgeStore } from '../../db/search.js'
-import { clearIndexMetadata } from '../../db/metadata.js'
-import { createInitialStatus, state } from '../core/state.js'
+import { clearKnowledgeStore, removeKnowledgeDocuments } from '../../db/search.js'
+import {
+  clearIndexMetadata,
+  dbLoadEntryPathsByFolder,
+  dbLoadPendingDeletePathsByFolder,
+  removeIndexedEntries,
+  removePendingDeletes
+} from '../../db/metadata.js'
+import { appendEvent, createInitialStatus, state } from '../core/state.js'
+import { isSameOrNestedPath } from '../core/utils.js'
 import {
   getStoredTrackedFolders,
-  isSameOrNestedPath,
   resetStoredTrackedFolders,
   setStoredTrackedFolders
 } from '../tracking/folders.js'
@@ -16,8 +22,43 @@ import {
   syncIndexingRuntimeStatus
 } from './reconcile.js'
 import { clearFolderWatchers } from '../tracking/watch.js'
-import { removeIndexedFolderData } from '../../query/api.js'
+import { openKnowledgeDb } from '../../db/db.js'
 import { applyTrackedFolders, getIndexingStatus } from './lifecycle.js'
+export const removeIndexedFolderData = async (payload) => {
+  const rawFolderPath = String(payload?.folderPath || '').trim()
+  if (!rawFolderPath) {
+    throw new Error('Folder path is required.')
+  }
+  if (state.indexingStatus.reconciling || state.indexingStatus.cancelling) {
+    throw new Error('Wait for indexing to settle before removing a folder.')
+  }
+  const normalizedFolderPath = path.resolve(rawFolderPath)
+  await openKnowledgeDb()
+  const folderIndexedPaths = dbLoadEntryPathsByFolder(normalizedFolderPath)
+  const folderQueuedPaths = dbLoadPendingDeletePathsByFolder(normalizedFolderPath)
+  if (!folderIndexedPaths.length && !folderQueuedPaths.length) {
+    return {
+      folderPath: normalizedFolderPath,
+      removedCount: 0
+    }
+  }
+  if (folderIndexedPaths.length) {
+    await removeKnowledgeDocuments(folderIndexedPaths)
+    removeIndexedEntries(folderIndexedPaths, false)
+  }
+  if (folderQueuedPaths.length) {
+    removePendingDeletes(folderQueuedPaths)
+  }
+  appendEvent(
+    'info',
+    `Removed ${folderIndexedPaths.length} indexed files from ${normalizedFolderPath}.`
+  )
+  state.deletionSweepByFolder.delete(normalizedFolderPath)
+  return {
+    folderPath: normalizedFolderPath,
+    removedCount: folderIndexedPaths.length
+  }
+}
 export const getTrackedIndexFolders = async () => {
   const shouldBootstrap = state.trackedFolders.length === 0 && state.folderWatchers.size === 0
   const folders = await getStoredTrackedFolders()

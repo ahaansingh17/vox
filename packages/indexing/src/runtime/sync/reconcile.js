@@ -18,7 +18,7 @@ import { ensureIndexMetadataLoaded } from '../../db/metadata.js'
 import { removeStaleIndexedPathsForScope } from './cleanup.js'
 import { pathExists, scanIndexingScope } from '../../ingest/scan.js'
 import { workerLoop } from '../../ingest/worker.js'
-import { isSameOrNestedPath } from '../tracking/folders.js'
+import { isSameOrNestedPath } from '../core/utils.js'
 const buildScopeKey = (folderPath, scopePath) => `${folderPath}::${scopePath}`
 const scheduleQueuedReconcile = (delayMs) => {
   if (state.reconcileTimer) {

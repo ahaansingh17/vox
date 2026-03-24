@@ -1,4 +1,4 @@
-import { getKnowledgeDb, indexingDbState } from './state.js'
+import { getKnowledgeDb, indexingDbState } from './prepared.js'
 export const dbGetKnowledgeDocument = (filePath) =>
   indexingDbState.documents.get.get(filePath) || null
 export const dbTouchKnowledgeDocument = ({

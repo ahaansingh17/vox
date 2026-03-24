@@ -1,8 +1,8 @@
 import { app, utilityProcess } from 'electron'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { logger } from '../logger.js'
-import { captureMainException } from '../sentry.js'
+import { logger } from '../telemetry/logger.js'
+import { captureMainException } from '../telemetry/sentry.js'
 const PROCESS_READY_TIMEOUT_MS = 15_000
 const indexingProcessState = {
   child: null,
@@ -38,6 +38,17 @@ const handleIndexingProcessMessage = (message) => {
     indexingProcessState.resolveReady?.()
     indexingProcessState.resolveReady = null
     indexingProcessState.rejectReady = null
+    return
+  }
+  if (message.type === 'telemetry') {
+    if (message.level === 'exception') {
+      const error = new Error(message.error?.message || 'Indexing child error')
+      if (message.error?.stack) error.stack = message.error.stack
+      if (message.error?.code) error.code = message.error.code
+      captureMainException(error, message.context)
+    } else {
+      logger.warn('[indexing-child]', message.message, message.context)
+    }
     return
   }
   if (message.type !== 'response') {

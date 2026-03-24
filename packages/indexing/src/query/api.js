@@ -6,50 +6,7 @@ import {
   dbLoadEntriesByPathPrefix,
   openKnowledgeDb
 } from '../db/db.js'
-import { removeKnowledgeDocuments } from '../db/search.js'
-import { appendEvent, state } from '../runtime/core/state.js'
-import {
-  dbLoadEntryPathsByFolder,
-  dbLoadPendingDeletePathsByFolder,
-  removeIndexedEntries,
-  removePendingDeletes
-} from '../db/metadata.js'
 export { getIndexedChildren } from './explorer/children.js'
-export const removeIndexedFolderData = async (payload) => {
-  const rawFolderPath = String(payload?.folderPath || '').trim()
-  if (!rawFolderPath) {
-    throw new Error('Folder path is required.')
-  }
-  if (state.indexingStatus.reconciling || state.indexingStatus.cancelling) {
-    throw new Error('Wait for indexing to settle before removing a folder.')
-  }
-  const normalizedFolderPath = path.resolve(rawFolderPath)
-  await openKnowledgeDb()
-  const folderIndexedPaths = dbLoadEntryPathsByFolder(normalizedFolderPath)
-  const folderQueuedPaths = dbLoadPendingDeletePathsByFolder(normalizedFolderPath)
-  if (!folderIndexedPaths.length && !folderQueuedPaths.length) {
-    return {
-      folderPath: normalizedFolderPath,
-      removedCount: 0
-    }
-  }
-  if (folderIndexedPaths.length) {
-    await removeKnowledgeDocuments(folderIndexedPaths)
-    removeIndexedEntries(folderIndexedPaths, false)
-  }
-  if (folderQueuedPaths.length) {
-    removePendingDeletes(folderQueuedPaths)
-  }
-  appendEvent(
-    'info',
-    `Removed ${folderIndexedPaths.length} indexed files from ${normalizedFolderPath}.`
-  )
-  state.deletionSweepByFolder.delete(normalizedFolderPath)
-  return {
-    folderPath: normalizedFolderPath,
-    removedCount: folderIndexedPaths.length
-  }
-}
 export const listIndexedFilesForTool = async (payload = {}) => {
   await openKnowledgeDb()
   const prefix = String(payload?.prefix || '').trim()

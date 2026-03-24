@@ -2,7 +2,6 @@ import { useCallback, useState } from 'react'
 import { ToastLayer } from '../../primitives/Toast'
 
 export default function AppShell({
-  activeRoute,
   children,
   collapsed: controlledCollapsed,
   defaultCollapsed = false,

@@ -3,7 +3,7 @@ import { opendir, stat } from 'node:fs/promises'
 import { detectFileKind, isUnchangedFile } from '../../ingest/files.js'
 import { IGNORED_DIRECTORIES } from '../../runtime/core/constants.js'
 import { state } from '../../runtime/core/state.js'
-import { isInsideOrSamePath } from '../../runtime/core/utils.js'
+import { isSameOrNestedPath } from '../../runtime/core/utils.js'
 const DIRECTORY_STATUS_PRIORITY = {
   indexing: 4,
   pending: 3,
@@ -45,7 +45,7 @@ export const createIndexedFileEntryByPath = (entries, basePath) => {
   const indexedFileEntryByPath = new Map()
   for (const indexedEntry of entries) {
     const indexedPath = indexedEntry.path
-    if (!isInsideOrSamePath(indexedPath, basePath)) {
+    if (!isSameOrNestedPath(basePath, indexedPath)) {
       continue
     }
     const relativeToBasePath = path.relative(basePath, indexedPath)
@@ -73,7 +73,7 @@ export const createIndexedFileEntryByPath = (entries, basePath) => {
 export const collectDirectChildNames = (pathsSet, basePath) => {
   const childNames = new Set()
   for (const indexedPath of pathsSet) {
-    if (!isInsideOrSamePath(indexedPath, basePath)) {
+    if (!isSameOrNestedPath(basePath, indexedPath)) {
       continue
     }
     const relativeToBasePath = path.relative(basePath, indexedPath)

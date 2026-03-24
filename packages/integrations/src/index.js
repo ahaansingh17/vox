@@ -1,8 +1,7 @@
-export {
-  MAIL_TOOL_DEFINITIONS,
-  SCREEN_TOOL_DEFINITIONS,
-  IMESSAGE_TOOL_DEFINITIONS
-} from './defs/index.js'
+export { MAIL_TOOL_DEFINITIONS } from './mail/def.js'
+export { SCREEN_TOOL_DEFINITIONS } from './screen/def.js'
+export { IMESSAGE_TOOL_DEFINITIONS } from './imessage/def.js'
 export * from './mail/index.js'
 export * from './screen/index.js'
 export * from './imessage/index.js'
+export { ALL_INTEGRATION_TOOLS, SCREEN_TOOLS, MAIL_TOOLS, IMESSAGE_TOOLS } from './tools.js'

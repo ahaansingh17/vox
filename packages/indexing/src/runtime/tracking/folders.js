@@ -1,5 +1,6 @@
 import { homedir } from 'node:os'
 import path from 'node:path'
+export { isSameOrNestedPath } from '../core/utils.js'
 import { stat } from 'node:fs/promises'
 import { openKnowledgeDb } from '../../db/db.js'
 import { kvDelete, kvGet, kvSet } from '../../db/metadata.js'
@@ -32,10 +33,6 @@ const normalizeStoredFolders = (foldersInput) => {
     uniqueFolders.push(normalizedPath)
   }
   return uniqueFolders
-}
-export const isSameOrNestedPath = (parentPath, candidatePath) => {
-  const relativePath = path.relative(parentPath, candidatePath)
-  return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath))
 }
 export const validateTrackedFolders = async (foldersInput) => {
   const normalizedFolders = normalizeStoredFolders(foldersInput)

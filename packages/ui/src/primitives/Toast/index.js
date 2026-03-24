@@ -1,1 +1,2 @@
-export { default as ToastLayer, useToast } from './Toast'
+export { default as ToastLayer } from './Toast'
+export { useToast } from './useToast'

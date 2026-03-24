@@ -8,10 +8,10 @@
   "homepage": "https://www.vox-ai.chat",
   "repository": {
     "type": "git",
-    "url": "https://github.com/info-arnav/vox.git"
+    "url": "https://github.com/vox-ai-app/vox.git"
   },
   "bugs": {
-    "url": "https://github.com/info-arnav/vox/issues"
+    "url": "https://github.com/vox-ai-app/vox/issues"
   },
   "workspaces": [
     "packages/*"
@@ -36,12 +36,12 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
-    "@info-arnav/vox-ui": "^1.0.0",
-    "@info-arnav/vox-tools": "^1.0.0",
-    "@info-arnav/vox-integrations": "^1.0.0",
-    "@info-arnav/vox-mcp": "^1.0.0",
-    "@info-arnav/vox-indexing": "^1.0.0",
-    "@info-arnav/vox-voice": "^1.0.0",
+    "@vox-ai-app/vox-ui": "^1.0.0",
+    "@vox-ai-app/vox-tools": "^1.0.0",
+    "@vox-ai-app/vox-integrations": "^1.0.0",
+    "@vox-ai-app/vox-mcp": "^1.0.0",
+    "@vox-ai-app/vox-indexing": "^1.0.0",
+    "@vox-ai-app/vox-voice": "^1.0.0",
     "electron-updater": "^6.3.9"
   },
   "devDependencies": {

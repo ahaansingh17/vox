@@ -1,0 +1,36 @@
+{
+  "name": "@vox-ai-app/vox-parser",
+  "version": "1.0.0",
+  "type": "module",
+  "license": "MIT",
+  "description": "Document parsing (PDF, DOCX, PPTX, XLSX, ODT, RTF) for Vox",
+  "main": "./src/index.js",
+  "private": false,
+  "exports": {
+    ".": "./src/index.js",
+    "./formats/docx": "./src/formats/docx.js",
+    "./formats/pdf": "./src/formats/pdf.js",
+    "./formats/pptx": "./src/formats/pptx.js",
+    "./formats/xlsx": "./src/formats/xlsx.js",
+    "./formats/opendoc": "./src/formats/opendoc.js",
+    "./formats/rtf": "./src/formats/rtf.js",
+    "./formats/xml": "./src/formats/xml.js"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vox-ai-app/vox"
+  },
+  "files": [
+    "src",
+    "LICENSE",
+    "README.md"
+  ],
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "unpdf": "^1.4.0"
+  }
+}

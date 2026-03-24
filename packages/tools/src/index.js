@@ -1,8 +1,7 @@
-export { validateArgs, assertValidDefinition, clampNumber } from './schema.js'
-export { assertPublicUrl, isPrivateHost } from './network.js'
+export { validateArgs, assertValidDefinition, clampNumber } from './core/schema.js'
+export { assertPublicUrl, isPrivateHost } from './core/network.js'
 export {
   ALL_BUILTIN_TOOLS,
-  ALL_BUILTIN_DEFINITIONS,
   loadBuiltinTools,
   writeLocalFileTool,
   readLocalFileTool,
@@ -22,11 +21,11 @@ export {
   deleteLocalPath,
   getScratchDir,
   runLocalCommand
-} from './builtins/index.js'
+} from './compat/index.js'
+export { createWordDocument } from './tools/docs/word/execute.js'
+export { createPdfDocument } from './tools/docs/pdf/execute.js'
+export { createPresentationDocument } from './tools/docs/pptx/execute.js'
 export {
-  createWordDocument,
-  createPdfDocument,
-  createPresentationDocument,
   resolvePathInputFromPayload,
   resolveDocxPath,
   resolvePathWithExtension,
@@ -37,14 +36,11 @@ export {
   normalizeStructuredBlocks,
   toDocxHalfPoints,
   toDocxTwips
-} from './docs/index.js'
-export {
-  FS_TOOL_DEFINITIONS as FS_DEFS,
-  WORD_TOOL_DEFINITIONS,
-  PDF_TOOL_DEFINITIONS,
-  PPTX_TOOL_DEFINITIONS,
-  KNOWLEDGE_TOOL_DEFINITIONS
-} from './defs/index.js'
+} from './tools/docs/utils.js'
+export { FS_TOOL_DEFINITIONS as FS_DEFS } from './tools/fs/def.js'
+export { WORD_TOOL_DEFINITIONS } from './tools/docs/word/def.js'
+export { PDF_TOOL_DEFINITIONS } from './tools/docs/pdf/def.js'
+export { PPTX_TOOL_DEFINITIONS } from './tools/docs/pptx/def.js'
 export {
   EXEC_TIMEOUT,
   execAsync,
@@ -55,4 +51,6 @@ export {
   writeTempScript,
   cleanupTemp,
   parseTabSeparated
-} from './exec.js'
+} from './core/exec.js'
+export { ALL_TOOLS } from './tools/index.js'
+export { registerAll } from './core/registry.js'

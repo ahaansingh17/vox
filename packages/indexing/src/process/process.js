@@ -8,13 +8,13 @@ import {
   getTrackedIndexFolders,
   rebuildIndexing,
   removeIndexFolder,
+  removeIndexedFolderData,
   resetIndexingState
 } from '../runtime/sync/actions.js'
 import {
   getIndexedChildren,
   listIndexedFilesForTool,
-  readIndexedFileForTool,
-  removeIndexedFolderData
+  readIndexedFileForTool
 } from '../query/api.js'
 import { searchIndexedContextForTool } from '../db/search.js'
 import { closeKnowledgeDb } from '../db/db.js'
@@ -23,8 +23,29 @@ import {
   captureUtilityException,
   captureUtilityMessage,
   flushUtilitySentry,
-  initUtilitySentry
-} from '../sentry.utility.js'
+  initUtilitySentry,
+  setUtilitySentry
+} from '../telemetry/worker.js'
+setUtilitySentry({
+  init: () => {},
+  captureException: (error, context) => {
+    process.parentPort?.postMessage({
+      type: 'telemetry',
+      level: 'exception',
+      error: { message: error?.message, stack: error?.stack, code: error?.code },
+      context
+    })
+  },
+  captureMessage: (message, context) => {
+    process.parentPort?.postMessage({
+      type: 'telemetry',
+      level: 'message',
+      message: String(message),
+      context
+    })
+  },
+  flush: async () => {}
+})
 initUtilitySentry('indexing-child')
 const METHOD_HANDLERS = {
   addIndexFolder,

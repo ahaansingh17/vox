@@ -24,7 +24,7 @@ Talk to it, control your screen, manage your files, write documents, send emails
 
 ## Getting started
 
-**Download and install Vox** from the [latest release](https://github.com/info-arnav/vox/releases/latest).
+**Download and install Vox** from the [latest release](https://github.com/vox-ai-app/vox/releases/latest).
 
 The installer sets up Ollama and pulls the default model automatically. Open Vox when it's done.
 
@@ -35,8 +35,8 @@ Press `⌘⌥V` or say the wake word to start.
 ## Building from source
 
 ```sh
-git clone https://github.com/info-arnav/vox.git
-cd vox/local-app
+git clone https://github.com/vox-ai-app/vox.git
+cd vox
 npm install
 npm run dev
 ```
@@ -65,12 +65,13 @@ The monorepo publishes 6 packages used by both this app and the Vox cloud editio
 
 | Package                                                 | Version | Description                                |
 | ------------------------------------------------------- | ------- | ------------------------------------------ |
-| [`@info-arnav/vox-mcp`](packages/mcp)                   | 1.0.0   | MCP client (stdio, SSE, HTTP)              |
-| [`@info-arnav/vox-tools`](packages/tools)               | 1.0.0   | Registry, builtins, docs, tool definitions |
-| [`@info-arnav/vox-integrations`](packages/integrations) | 1.0.0   | Mail, Screen, iMessage integrations        |
-| [`@info-arnav/vox-voice`](packages/voice)               | 1.0.0   | Wake word detection and voice window       |
-| [`@info-arnav/vox-indexing`](packages/indexing)         | 1.0.0   | File indexing and full-text search         |
-| [`@info-arnav/vox-ui`](packages/ui)                     | 1.0.0   | React UI components and design tokens      |
+| [`@vox-ai-app/vox-mcp`](packages/mcp)                   | 1.0.0   | MCP client (stdio, SSE, HTTP)              |
+| [`@vox-ai-app/vox-tools`](packages/tools)               | 1.0.0   | Registry, builtins, docs, tool definitions |
+| [`@vox-ai-app/vox-integrations`](packages/integrations) | 1.0.0   | Mail, Screen, iMessage integrations        |
+| [`@vox-ai-app/vox-voice`](packages/voice)               | 1.0.0   | Wake word detection and voice window       |
+| [`@vox-ai-app/vox-indexing`](packages/indexing)         | 1.0.0   | File indexing and full-text search         |
+| [`@vox-ai-app/vox-parser`](packages/parser)             | 1.0.0   | Document parsing (PDF, DOCX, PPTX, etc.)   |
+| [`@vox-ai-app/vox-ui`](packages/ui)                     | 1.0.0   | React UI components and design tokens      |
 
 ---
 

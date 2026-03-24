@@ -13,8 +13,8 @@
 
 Report vulnerabilities privately via one of:
 
-- **Email:** security@vox-ai.chat
-- **GitHub private advisory:** [Report a vulnerability](https://github.com/info-arnav/vox/security/advisories/new)
+- **Email:** info@vox-ai.chat
+- **GitHub private advisory:** [Report a vulnerability](https://github.com/vox-ai-app/vox/security/advisories/new)
 
 Include:
 
@@ -30,7 +30,7 @@ We will acknowledge your report within 48 hours and aim to release a fix within 
 In scope:
 
 - The Vox Electron app
-- Published npm packages (`@info-arnav/vox-*`)
+- Published npm packages (`@vox-ai-app/vox-*`)
 - Remote code execution, privilege escalation, or data exfiltration vectors
 
 Out of scope:

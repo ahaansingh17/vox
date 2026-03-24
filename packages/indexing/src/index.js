@@ -14,5 +14,11 @@ export {
   searchIndexedContextForTool,
   pickIndexFolder
 } from './runtime/service.js'
-export { setLogger } from './logger.js'
-export { setSentryCapture } from './sentry.js'
+export { setLogger } from './telemetry/logger.js'
+export { setSentryCapture } from './telemetry/sentry.js'
+export {
+  ALL_KNOWLEDGE_TOOLS,
+  listIndexedFilesTool,
+  readIndexedFileTool,
+  searchIndexedContextTool
+} from './tools.js'

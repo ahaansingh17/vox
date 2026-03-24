@@ -4,6 +4,6 @@ export {
   getMaxRowId,
   listConversations,
   listContacts
-} from './data.js'
-export { sendReply, setLogger as setReplyLogger } from './reply.js'
-export { createIMessageService } from './service.js'
+} from './mac/data.js'
+export { sendReply } from './mac/reply.js'
+export { createIMessageService } from './mac/service.js'

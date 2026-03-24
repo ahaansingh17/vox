@@ -1,4 +1,4 @@
-import { buildPathPrefixPattern, getKnowledgeDb, indexingDbState } from './state.js'
+import { buildPathPrefixPattern, getKnowledgeDb, indexingDbState } from './prepared.js'
 export const dbLoadAllEntries = () => indexingDbState.entries.loadAll.all()
 export const dbGetEntry = (filePath) => indexingDbState.entries.get.get(filePath) || null
 export const dbLoadEntryPathsByFolder = (folderPath) =>

@@ -15,18 +15,18 @@ This is an npm workspaces monorepo. The root `package.json` manages the Electron
 vox/
 ├── src/                  Electron app source (main + renderer)
 ├── packages/
-│   ├── mcp/              @info-arnav/vox-mcp
-│   ├── tools/            @info-arnav/vox-tools
-│   ├── integrations/     @info-arnav/vox-integrations
-│   ├── voice/            @info-arnav/vox-voice
-│   ├── indexing/         @info-arnav/vox-indexing
-│   └── ui/               @info-arnav/vox-ui
+│   ├── mcp/              @vox-ai-app/vox-mcp
+│   ├── tools/            @vox-ai-app/vox-tools
+│   ├── integrations/     @vox-ai-app/vox-integrations
+│   ├── voice/            @vox-ai-app/vox-voice
+│   ├── indexing/         @vox-ai-app/vox-indexing
+│   └── ui/               @vox-ai-app/vox-ui
 └── package.json
 ```
 
 ```sh
-git clone https://github.com/info-arnav/vox.git
-cd vox/local-app
+git clone https://github.com/vox-ai-app/vox.git
+cd vox
 npm install       # installs all workspace packages and app deps
 npm run dev       # starts the app with hot reload
 ```
@@ -103,4 +103,4 @@ docs(indexing): update README with build config example
 
 ## Questions
 
-Open a [GitHub Discussion](https://github.com/info-arnav/vox/discussions) for questions. Use issues for confirmed bugs and feature requests.
+Open a [GitHub Discussion](https://github.com/vox-ai-app/vox/discussions) for questions. Use issues for confirmed bugs and feature requests.

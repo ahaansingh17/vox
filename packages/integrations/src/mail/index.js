@@ -1,5 +1,5 @@
-import { sendEmailMac, searchContactsMac } from './send/mac.js'
-import { readEmailsMac, getEmailBodyMac } from './read/mac.js'
+import { sendEmailMac, searchContactsMac } from './send/index.js'
+import { readEmailsMac, getEmailBodyMac } from './read/index.js'
 import {
   replyToEmailMac,
   forwardEmailMac,
@@ -9,7 +9,7 @@ import {
   moveEmailMac,
   createDraftMac,
   saveAttachmentMac
-} from './manage/mac.js'
+} from './manage/index.js'
 const normalizeList = (v) => {
   if (!v) return []
   if (Array.isArray(v)) return v.map((s) => String(s).trim()).filter(Boolean)

@@ -14,19 +14,9 @@ export const isRetriableError = (error) => {
     errorCode === 'ENFILE'
   )
 }
-export const isInsideFolder = (filePath, folderPath) => {
-  const relative = path.relative(folderPath, filePath)
-  if (!relative) {
-    return false
-  }
-  return !relative.startsWith('..') && !path.isAbsolute(relative)
-}
-export const isInsideOrSamePath = (candidatePath, rootPath) => {
-  const relative = path.relative(rootPath, candidatePath)
-  if (!relative) {
-    return true
-  }
-  return !relative.startsWith('..') && !path.isAbsolute(relative)
+export const isSameOrNestedPath = (parentPath, candidatePath) => {
+  const relativePath = path.relative(parentPath, candidatePath)
+  return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath))
 }
 export const chunkArray = (items, chunkSize) => {
   const result = []
