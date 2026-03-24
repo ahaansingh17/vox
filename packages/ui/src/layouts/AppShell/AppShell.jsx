@@ -20,9 +20,10 @@ export default function AppShell({
     onCollapseChange?.(next)
   }, [collapsed, controlledCollapsed, onCollapseChange])
 
-  const sidebarElement = typeof sidebar === 'function'
-    ? sidebar({ collapsed, onToggleCollapse: toggleCollapsed })
-    : sidebar
+  const sidebarElement =
+    typeof sidebar === 'function'
+      ? sidebar({ collapsed, onToggleCollapse: toggleCollapsed })
+      : sidebar
 
   return (
     <section className="workspace-shell" data-sidebar-collapsed={collapsed || undefined}>
@@ -32,9 +33,7 @@ export default function AppShell({
           <div className="workspace-page">{children}</div>
         </main>
       </div>
-      {toasts && onDismissToast && (
-        <ToastLayer toasts={toasts} onDismiss={onDismissToast} />
-      )}
+      {toasts && onDismissToast && <ToastLayer toasts={toasts} onDismiss={onDismissToast} />}
     </section>
   )
 }

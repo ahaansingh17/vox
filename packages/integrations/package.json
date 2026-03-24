@@ -1,0 +1,46 @@
+{
+  "name": "@info-arnav/vox-integrations",
+  "version": "1.0.1",
+  "type": "module",
+  "license": "MIT",
+  "description": "macOS integrations (Mail, Screen, iMessage) for Vox",
+  "main": "./src/index.js",
+  "private": false,
+  "exports": {
+    ".": "./src/index.js",
+    "./defs": "./src/defs/index.js",
+    "./defs/mail": "./src/defs/mail.js",
+    "./defs/screen": "./src/defs/screen.js",
+    "./defs/imessage": "./src/defs/imessage.js",
+    "./mail": "./src/mail/index.js",
+    "./mail/mac": "./src/mail/mac.shared.js",
+    "./screen": "./src/screen/index.js",
+    "./screen/capture": "./src/screen/capture.js",
+    "./screen/control": "./src/screen/control.js",
+    "./screen/queue": "./src/screen/queue.js",
+    "./screen/helpers": "./src/screen/helpers.js",
+    "./imessage": "./src/imessage/index.js",
+    "./imessage/data": "./src/imessage/data.js",
+    "./imessage/reply": "./src/imessage/reply.js",
+    "./imessage/service": "./src/imessage/service.js"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/info-arnav/vox"
+  },
+  "files": [
+    "src",
+    "LICENSE",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "electron": ">=28.0.0"
+  },
+  "dependencies": {
+    "@info-arnav/vox-tools": "^1.0.0",
+    "better-sqlite3": "^12.0.0"
+  }
+}

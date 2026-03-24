@@ -82,8 +82,12 @@
 }
 
 @keyframes toastBar {
-  from { width: 100%; }
-  to { width: 0%; }
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
 }
 
 .app-toast-error .app-toast-bar {

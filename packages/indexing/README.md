@@ -1,0 +1,115 @@
+# @info-arnav/vox-indexing
+
+Local file indexing, full-text search, and document parsing for Vox. Runs in a separate Electron utility process to keep the main process responsive.
+
+## Install
+
+```sh
+npm install @info-arnav/vox-indexing
+```
+
+Peer dependency: `electron >= 28`
+
+## Requirements
+
+- `VOX_USER_DATA_PATH` — writable directory, database stored as `knowledge-index.db`
+- `VOX_APP_PATH` — app path, used to locate the parser worker
+- Build config must emit two separate entry points (see Build section)
+
+## Usage
+
+```js
+import {
+  bootIndexingRuntime,
+  shutdownIndexingRuntime,
+  addIndexFolder,
+  removeIndexFolder,
+  searchIndexedContextForTool,
+  getIndexingStatus,
+  setLogger,
+  setSentryCapture
+} from '@info-arnav/vox-indexing'
+
+setLogger(logger)
+setSentryCapture(captureException)
+
+await bootIndexingRuntime()
+
+await addIndexFolder('/Users/me/Documents')
+
+const results = await searchIndexedContextForTool('query text', { limit: 5 })
+
+await shutdownIndexingRuntime()
+```
+
+## API
+
+### Runtime lifecycle
+
+```ts
+bootIndexingRuntime() // start the indexing utility process
+shutdownIndexingRuntime() // graceful shutdown
+rebuildIndexing() // wipe and re-index all folders
+resetIndexingState() // clear state without reindexing
+```
+
+### Folder management
+
+```ts
+addIndexFolder(path) // add a folder to the index
+removeIndexFolder(path) // remove a folder and its data
+getTrackedIndexFolders() // list all tracked folders
+pickIndexFolder() // open a native folder picker dialog
+```
+
+### Query
+
+```ts
+searchIndexedContextForTool(query, opts) // full-text search
+listIndexedFilesForTool(path, opts) // list files under a path
+readIndexedFileForTool(path) // read a specific indexed file
+getIndexedChildren(path) // explorer tree children
+getIndexingStatus() // current status + progress
+```
+
+### IPC registration
+
+For Electron apps that expose indexing over IPC:
+
+```js
+import { registerIndexingIpc } from '@info-arnav/vox-indexing/ipc'
+
+registerIndexingIpc()
+// Registers: indexing:get-folders, indexing:add-folder, indexing:remove-folder,
+//            indexing:rebuild, indexing:get-status, indexing:pick-folder,
+//            indexing:get-indexed-children, indexing:reset-state
+```
+
+## Supported file types
+
+`.pdf`, `.docx`, `.pptx`, `.xlsx`, `.odt`, `.odp`, `.ods`, `.rtf`, and plain text files.
+
+## Build
+
+Register two additional entry points in your Electron build config:
+
+```js
+// electron.vite.config.js
+export default {
+  main: {
+    build: {
+      rollupOptions: {
+        input: {
+          index: 'src/main/index.js',
+          'indexing.process': 'node_modules/@info-arnav/vox-indexing/src/process/process.js',
+          'indexing.parser.worker': 'node_modules/@info-arnav/vox-indexing/src/parser/worker.js'
+        }
+      }
+    }
+  }
+}
+```
+
+## License
+
+MIT

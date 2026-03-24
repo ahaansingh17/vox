@@ -27,7 +27,7 @@ export default function ChatComposer({
             name="chat-message-input"
             onInput={onInput}
             onKeyDown={onKeyDown}
-            placeholder={isActive ? 'Working...' : (placeholder || 'Type your prompt...')}
+            placeholder={isActive ? 'Working...' : placeholder || 'Type your prompt...'}
             ref={inputRef}
             rows={1}
             disabled={isActive}

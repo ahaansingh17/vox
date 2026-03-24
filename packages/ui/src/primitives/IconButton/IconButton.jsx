@@ -1,4 +1,12 @@
-export default function IconButton({ icon: Icon, size = 14, label, disabled, className = '', onClick, ...rest }) {
+export default function IconButton({
+  icon: Icon,
+  size = 14,
+  label,
+  disabled,
+  className = '',
+  onClick,
+  ...rest
+}) {
   return (
     <button
       aria-label={label}

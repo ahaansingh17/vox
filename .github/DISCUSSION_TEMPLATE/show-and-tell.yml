@@ -1,0 +1,14 @@
+title: '[Show] '
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What did you build?
+      description: Share what you made with Vox or on top of it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: links
+    attributes:
+      label: Links or screenshots

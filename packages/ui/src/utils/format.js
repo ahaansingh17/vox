@@ -10,7 +10,6 @@ export const parseToolArgs = (rawArgs) => {
   }
   return {}
 }
-
 export const toolLabel = (name) => {
   const n = String(name || '').toLowerCase()
   if (n === 'read_local_file' || n === 'read_file') return 'Read file'
@@ -27,7 +26,6 @@ export const toolLabel = (name) => {
   if (n.includes('index')) return 'Index content'
   return name || 'Use tool'
 }
-
 export function relativeTime(iso) {
   if (!iso) return ''
   const diff = Date.now() - new Date(iso).getTime()
@@ -39,7 +37,6 @@ export function relativeTime(iso) {
   if (h < 24) return `${h}h ago`
   return `${Math.floor(h / 24)}d ago`
 }
-
 export function elapsedLabel(startIso, endIso) {
   if (!startIso) return null
   const startMs = new Date(startIso).getTime()
@@ -50,7 +47,6 @@ export function elapsedLabel(startIso, endIso) {
   const r = s % 60
   return r > 0 ? `${m}m ${r}s` : `${m}m`
 }
-
 export function formatBytes(bytes) {
   if (bytes == null || isNaN(bytes)) return '—'
   if (bytes === 0) return '0 B'
@@ -59,7 +55,6 @@ export function formatBytes(bytes) {
   const value = bytes / Math.pow(1024, i)
   return `${i === 0 ? value : value.toFixed(1)} ${units[i]}`
 }
-
 export function formatIndexedTime(iso) {
   if (!iso) return '—'
   return new Date(iso).toLocaleString(undefined, {
@@ -69,7 +64,6 @@ export function formatIndexedTime(iso) {
     minute: '2-digit'
   })
 }
-
 export function getStatusLabel(status) {
   const map = {
     indexed: 'Indexed',
@@ -81,17 +75,14 @@ export function getStatusLabel(status) {
   }
   return map[status] || status || '—'
 }
-
 export const PHASE = Object.freeze({
-  IDLE: 'idle',
-  SENDING: 'sending',
-  STREAMING: 'streaming',
-  ABORTING: 'aborting'
+  IDLE: 'IDLE',
+  SENDING: 'SENDING',
+  STREAMING: 'STREAMING',
+  ABORTING: 'ABORTING'
 })
-
 export const TERMINAL_STATUSES = new Set(['completed', 'failed', 'aborted', 'incomplete'])
 export const RUNNING_STATUSES = new Set(['running', 'spawned'])
-
 export const TASK_STATUS_COLOR = {
   running: 'pink',
   completed: 'green',
@@ -101,7 +92,6 @@ export const TASK_STATUS_COLOR = {
   spawned: 'pink',
   pending: 'muted'
 }
-
 export const TASK_STATUS_LABEL = {
   running: 'Running',
   completed: 'Done',
@@ -111,7 +101,6 @@ export const TASK_STATUS_LABEL = {
   spawned: 'Starting',
   pending: 'Pending'
 }
-
 export const PRIMARY_ARG_KEYS = [
   'query',
   'path',
@@ -128,7 +117,6 @@ export const PRIMARY_ARG_KEYS = [
   'value',
   'name'
 ]
-
 export function getToolSub(toolName, argsObj) {
   const n = String(toolName || '').toLowerCase()
   if (n === 'execute_code' || n.includes('execute') || n === 'run_code') {
@@ -141,16 +129,27 @@ export function getToolSub(toolName, argsObj) {
   }
   return null
 }
-
 export function getOutcomeBadge(toolName, rawResult) {
   if (!rawResult) return null
   const n = String(toolName || '').toLowerCase()
   if (n === 'execute_code' || n.includes('execute') || n === 'run_code') {
     const r = typeof rawResult === 'string' ? null : rawResult
     if (!r) return null
-    if (r.timedOut) return { label: 'timed out', type: 'timeout' }
-    if (r.exitCode !== undefined && r.exitCode !== 0) return { label: 'failed', type: 'error' }
-    if (r.exitCode === 0) return { label: 'ok', type: 'success' }
+    if (r.timedOut)
+      return {
+        label: 'timed out',
+        type: 'timeout'
+      }
+    if (r.exitCode !== undefined && r.exitCode !== 0)
+      return {
+        label: 'failed',
+        type: 'error'
+      }
+    if (r.exitCode === 0)
+      return {
+        label: 'ok',
+        type: 'success'
+      }
   }
   return null
 }

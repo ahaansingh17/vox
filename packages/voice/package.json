@@ -1,0 +1,31 @@
+{
+  "name": "@info-arnav/vox-voice",
+  "version": "1.0.1",
+  "type": "module",
+  "license": "MIT",
+  "description": "ONNX wake-word detection, voice window, and voice lifecycle for Vox",
+  "main": "./src/index.js",
+  "private": false,
+  "exports": {
+    ".": "./src/index.js",
+    "./worker": "./src/worker.js",
+    "./window": "./src/window.js"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/info-arnav/vox"
+  },
+  "files": [
+    "src",
+    "LICENSE",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "electron": ">=28.0.0",
+    "@picovoice/pvrecorder-node": ">=1.0.0",
+    "onnxruntime-node": ">=1.18.0"
+  }
+}

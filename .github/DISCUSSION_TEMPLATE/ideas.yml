@@ -1,0 +1,16 @@
+title: '[Idea] '
+labels: ['enhancement']
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idea
+      description: Describe the idea and what problem it solves.
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: Any extra context, mockups, or examples.

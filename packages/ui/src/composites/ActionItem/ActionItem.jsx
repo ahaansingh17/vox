@@ -1,10 +1,23 @@
 import { memo, useState } from 'react'
 import {
-  BookOpen, ChevronDown, ChevronRight, FileText, Globe,
-  Monitor, PenLine, Search, Terminal, Wrench, Zap
+  BookOpen,
+  ChevronDown,
+  ChevronRight,
+  FileText,
+  Globe,
+  Monitor,
+  PenLine,
+  Search,
+  Terminal,
+  Wrench,
+  Zap
 } from 'lucide-react'
 import {
-  parseToolArgs, toolLabel, PRIMARY_ARG_KEYS, getToolSub, getOutcomeBadge
+  parseToolArgs,
+  toolLabel,
+  PRIMARY_ARG_KEYS,
+  getToolSub,
+  getOutcomeBadge
 } from '../../utils/format'
 
 function ActionToolIcon({ name, isDesktop, size }) {
@@ -36,7 +49,9 @@ function ExecuteCodeDetails({ argsObj, rawResult }) {
       {commands.length > 0 && (
         <div className="activity-code-commands">
           {commands.map((cmd, i) => (
-            <code key={i} className="activity-code-cmd">{String(cmd)}</code>
+            <code key={i} className="activity-code-cmd">
+              {String(cmd)}
+            </code>
           ))}
         </div>
       )}
@@ -95,7 +110,9 @@ export const ActionItem = memo(function ActionItem({ call, result, isLast, repea
   const isExecute =
     toolName === 'execute_code' || toolName.includes('execute') || toolName === 'run_code'
   const label = isDesktop
-    ? toolName ? `Desktop · ${toolName}` : 'Desktop action'
+    ? toolName
+      ? `Desktop · ${toolName}`
+      : 'Desktop action'
     : toolLabel(toolName)
 
   const argsObj = call?.args ?? parseToolArgs(call?.data?.payload ?? call?.data?.args ?? null)
