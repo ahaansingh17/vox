@@ -11,7 +11,8 @@ const indexingProcessState = {
   rejectReady: null,
   nextRequestId: 0,
   pendingRequests: new Map(),
-  shuttingDown: false
+  shuttingDown: false,
+  onStatusChange: null
 }
 const resolveIndexingProcessModulePath = () => {
   return join(app.getAppPath(), 'out/main/indexing.process.js')
@@ -49,6 +50,10 @@ const handleIndexingProcessMessage = (message) => {
     } else {
       logger.warn('[indexing-child]', message.message, message.context)
     }
+    return
+  }
+  if (message.type === 'status-change') {
+    indexingProcessState.onStatusChange?.(message.status)
     return
   }
   if (message.type !== 'response') {
@@ -167,6 +172,9 @@ export const invokeIndexingProcess = async (method, payload) => {
       payload
     })
   })
+}
+export const setOnStatusChange = (fn) => {
+  indexingProcessState.onStatusChange = typeof fn === 'function' ? fn : null
 }
 export const shutdownIndexingProcess = async () => {
   if (!indexingProcessState.child) {

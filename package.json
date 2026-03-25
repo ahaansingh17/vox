@@ -42,7 +42,11 @@
     "@vox-ai-app/vox-mcp": "^1.0.0",
     "@vox-ai-app/vox-indexing": "^1.0.0",
     "@vox-ai-app/vox-voice": "^1.0.0",
-    "electron-updater": "^6.3.9"
+    "electron-log": "^5.3.4",
+    "electron-updater": "^6.3.9",
+    "react-virtuoso": "^4.12.0",
+    "zustand": "^5.0.0",
+    "node-llama-cpp": "^3.0.0"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.8",

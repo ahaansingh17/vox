@@ -1,6 +1,6 @@
 {
   "name": "@vox-ai-app/vox-indexing",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "license": "MIT",
   "description": "Local file indexing, full-text search, and document parsing for Vox",

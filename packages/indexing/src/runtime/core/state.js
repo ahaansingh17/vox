@@ -38,10 +38,25 @@ export const state = {
   fullReconcileTimer: null
 }
 export const cloneStatus = () => JSON.parse(JSON.stringify(state.indexingStatus))
+
+let _onStatusChange = null
+let _notifyTimer = null
+
+export const setStatusChangeCallback = (fn) => {
+  _onStatusChange = typeof fn === 'function' ? fn : null
+}
+
 export const setStatus = (patch) => {
   state.indexingStatus = {
     ...state.indexingStatus,
     ...patch
+  }
+  if (_onStatusChange) {
+    if (_notifyTimer) clearTimeout(_notifyTimer)
+    _notifyTimer = setTimeout(() => {
+      _notifyTimer = null
+      _onStatusChange(cloneStatus())
+    }, 100)
   }
 }
 export const appendEvent = (level, message) => {

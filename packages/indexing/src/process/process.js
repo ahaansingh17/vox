@@ -19,6 +19,7 @@ import {
 import { searchIndexedContextForTool } from '../db/search.js'
 import { closeKnowledgeDb } from '../db/db.js'
 import { destroyParserWorker } from '../parser/pool.js'
+import { setStatusChangeCallback } from '../runtime/core/state.js'
 import {
   captureUtilityException,
   captureUtilityMessage,
@@ -47,6 +48,9 @@ setUtilitySentry({
   flush: async () => {}
 })
 initUtilitySentry('indexing-child')
+setStatusChangeCallback((status) => {
+  process.parentPort?.postMessage({ type: 'status-change', status })
+})
 const METHOD_HANDLERS = {
   addIndexFolder,
   bootIndexingRuntime,
