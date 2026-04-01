@@ -16,7 +16,8 @@ This is an early but fully working version. The goal is a general-purpose agenti
 
 - **Voice activation** — wake word or `⌘⌥V` to start
 - **Screen control** — click, type, scroll, and navigate any app via Accessibility
-- **File management** — read, write, search, and organize files
+- **File management** — read, write, edit, search, and organize files
+- **Grep & Glob** — regex search across files and find files by pattern
 - **Email** — send, read, and manage Apple Mail
 - **iMessage** — read conversations and send replies; passphrase mode lets it reply autonomously
 - **Documents** — create Word, PDF, and PowerPoint files
@@ -65,17 +66,18 @@ Nothing is sent off-device.
 
 ## Package structure
 
-The monorepo publishes 7 packages. Most are platform-agnostic and usable in any Electron app or Node.js project:
+The monorepo publishes 8 packages. Most are platform-agnostic and usable in any Electron app or Node.js project:
 
-| Package                                             | Platform        | Description                                |
-| --------------------------------------------------- | --------------- | ------------------------------------------ |
-| [`@vox-ai-app/mcp`](packages/mcp)                   | any             | MCP client (stdio, SSE, HTTP)              |
-| [`@vox-ai-app/tools`](packages/tools)               | any             | Registry, builtins, docs, tool definitions |
-| [`@vox-ai-app/integrations`](packages/integrations) | macOS (for now) | Mail, Screen, iMessage integrations        |
-| [`@vox-ai-app/voice`](packages/voice)               | any             | Wake word detection and voice window       |
-| [`@vox-ai-app/indexing`](packages/indexing)         | any             | File indexing and full-text search         |
-| [`@vox-ai-app/parser`](packages/parser)             | any             | Document parsing (PDF, DOCX, PPTX, etc.)   |
-| [`@vox-ai-app/ui`](packages/ui)                     | any             | React UI components and design tokens      |
+| Package                                             | Platform        | Description                                             |
+| --------------------------------------------------- | --------------- | ------------------------------------------------------- |
+| [`@vox-ai-app/mcp`](packages/mcp)                   | any             | MCP client (stdio, SSE, HTTP)                           |
+| [`@vox-ai-app/tools`](packages/tools)               | any             | Registry, builtins (fs, shell, fetch, grep, glob), docs |
+| [`@vox-ai-app/integrations`](packages/integrations) | macOS (for now) | Mail, Screen, iMessage integrations                     |
+| [`@vox-ai-app/voice`](packages/voice)               | any             | Wake word detection and voice window                    |
+| [`@vox-ai-app/indexing`](packages/indexing)         | any             | File indexing and full-text search                      |
+| [`@vox-ai-app/parser`](packages/parser)             | any             | Document parsing (PDF, DOCX, PPTX, etc.)                |
+| [`@vox-ai-app/storage`](packages/storage)           | any             | Local message and config persistence (SQLite)           |
+| [`@vox-ai-app/ui`](packages/ui)                     | any             | React UI components and design tokens                   |
 
 `@vox-ai-app/integrations` is the only package with platform-specific code today. Adding Windows or Linux integrations means adding an implementation alongside the existing macOS one without changing the rest of the workspace.
 

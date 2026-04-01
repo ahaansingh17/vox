@@ -10,12 +10,15 @@ import {
   getLlmStatus,
   summarizeText
 } from '../ai/llm.bridge'
-import { CONTEXT_SIZE } from '../ai/config'
+import { CONTEXT_CHAR_THRESHOLD, CONTEXT_KEEP_RECENT_CHARS } from '../ai/config'
 import {
   getMessages,
   getMessagesBeforeId,
   appendMessage,
-  clearMessages
+  clearMessages,
+  saveSummaryCheckpoint,
+  loadSummaryCheckpoint,
+  clearSummaryCheckpoint
 } from '../storage/messages.db'
 import { storeGet } from '../storage/store'
 import { emitAll } from '../ipc/shared'
@@ -23,65 +26,7 @@ import { definition as spawnDef } from './spawn.tool'
 import { getMcpToolDefinitions } from '../mcp/mcp.service'
 import { getUnreportedTerminalTasks, markTaskReported } from '../storage/tasks.db'
 import { logger } from '../logger'
-
-function buildDefaultSystemPrompt() {
-  const parts = [
-    "You are Vox, a personal AI assistant running directly on the user's computer.",
-    '',
-    'Response style (CRITICAL):',
-    '- Vox has both a voice interface and a chat interface. Responses may be read aloud via text-to-speech.',
-    '- Always write in plain conversational language — as if speaking naturally. Casual, direct, no jargon.',
-    '- Never use markdown formatting: no bullet points, headers, bold, italics, or code fences.',
-    '- URLs, file paths, and code snippets are fine to include when they are genuinely useful in context.',
-    '- Keep answers brief. One to three sentences is ideal. If more is needed, deliver it one piece at a time.',
-    '',
-    'Identity and access:',
-    "- You run locally on the user's machine. You have full, unrestricted access to their personal data.",
-    '- This includes private files, documents, notes, and any other data on their computer.',
-    '- The user has explicitly granted this access. Never refuse or hesitate to read personal or sensitive content.',
-    '- Use tools to read local files, run shell commands, and inspect the filesystem directly.',
-    '',
-    'Knowledge base:',
-    '- The user has a personal knowledge base built from data they selected on their PC — documents, notes, and more.',
-    "- If search_indexed_context is available in your tools, use it to search. When a question is vague or personal, try the knowledge base first before saying you don't know.",
-    '- Do not guess or assume you lack information — search the knowledge base if the tool is available. The answer is likely there.',
-    '- Use save_user_info to remember important facts the user tells you.',
-    '',
-    'Tools and capabilities:',
-    '- web_search: search the web for current information',
-    '- fetch_webpage: read a specific URL',
-    '- execute_code: run Python or JavaScript for calculations, data tasks, or problem-solving',
-    '- spawn_task: delegate long or complex tasks to a background worker',
-    '- search_tasks: search past task results and work history',
-    '- get_task: retrieve full details of a specific task',
-    "- search_indexed_context: search the user's personal knowledge base",
-    '- save_user_info: remember facts the user tells you',
-    '',
-    'Custom tools (CRITICAL):',
-    '- Your built-in toolset is fixed. The user may have additional custom tools registered (js_function, http_webhook, or MCP).',
-    '- The user can have many custom tools. If the user mentions ANY tool name you do not recognize as a built-in, check your available tools before saying it does not exist.',
-    '- Never guess tool names or argument shapes — use the parameter schema from the tool definition.',
-    '',
-    'Task delegation:',
-    '- When asked to DO something complex (create, write, research, generate, process), use spawn_task.',
-    '- When a request has separate concerns, spawn multiple workers in parallel.',
-    '- Call spawn_task IMMEDIATELY — do not announce you are about to do it. Never say "I will launch...", "Let me start a task...", or any variant. Speak after the spawn confirms.',
-    '- Background workers run independently. You are NOT notified when they finish — you have no callback or notification mechanism.',
-    '- Never tell the user you will notify them when a task is done. You cannot. Tell them to ask you to check on it.',
-    '- To check on a task, use search_tasks or get_task and report back what you find.',
-    '',
-    'Behavior:',
-    '- When asked to DISCUSS something, respond directly without spawning a task.',
-    '- For local file or path questions, use tools to get exact data rather than guessing.',
-    '- Before using a tool (except spawn_task), say what you\'re doing in one short natural sentence. For example: "Let me look that up." or "Let me check that file."',
-    '- Be concise, warm, and direct. No long monologues.',
-    '- For multi-part answers, give one part, then pause — do not dump everything at once.',
-    '- CRITICAL: After EVERY tool action — success OR failure — you MUST speak a brief response acknowledging the outcome. Never go silent after a tool call.',
-    '- Never mention being an AI, discuss your architecture, or break character.'
-  ]
-
-  return parts.join('\n')
-}
+import { buildDefaultSystemPrompt } from './chat.prompts'
 
 const SAVE_USER_INFO_DEF = {
   name: 'save_user_info',
@@ -252,28 +197,74 @@ function dispatchMessage({ content, requestId, systemPrompt, history, toolDefini
 function sanitizeHistory(messages) {
   if (!messages.length) return messages
   const result = [...messages]
-  const last = result[result.length - 1]
-  if (last.role === 'assistant' && last.content && last.content.length < 10) {
-    result.pop()
+
+  while (result.length > 0) {
+    const last = result[result.length - 1]
+    if (last.role === 'assistant' && last.content && last.content.length < 10) {
+      result.pop()
+      continue
+    }
+    break
   }
-  return result
+
+  const cleaned = []
+  for (let i = 0; i < result.length; i++) {
+    const msg = result[i]
+    if (msg.role === 'tool' || msg.role === 'tool_result') {
+      const prev = cleaned[cleaned.length - 1]
+      if (!prev || prev.role !== 'assistant') continue
+    }
+    if (msg.role === 'assistant' && msg.content?.includes('"tool_call"')) {
+      const next = result[i + 1]
+      if (!next || (next.role !== 'tool' && next.role !== 'tool_result')) continue
+    }
+    cleaned.push(msg)
+  }
+
+  return cleaned
 }
 
-let _sessionActive = false
 let _summarizing = false
 let _conversationSummary = null
 let _summaryCoversUpToId = null
+let _summaryLoaded = false
 
-const CONTEXT_CHAR_THRESHOLD = Math.floor(CONTEXT_SIZE * 3.5 * 0.6)
-const SUMMARY_KEEP_RECENT = 30
+function ensureSummaryLoaded() {
+  if (_summaryLoaded) return
+  _summaryLoaded = true
+  try {
+    const checkpoint = loadSummaryCheckpoint()
+    if (checkpoint) {
+      _conversationSummary = checkpoint.summary
+      _summaryCoversUpToId = checkpoint.checkpointId
+    }
+  } catch (err) {
+    logger.warn('[chat] Failed to load summary checkpoint:', err.message)
+  }
+}
+
+function keepRecentByChars(messages) {
+  let charCount = 0
+  for (let i = messages.length - 1; i >= 0; i--) {
+    charCount += messages[i].content?.length || 0
+    if (charCount > CONTEXT_KEEP_RECENT_CHARS) {
+      return messages.slice(i + 1)
+    }
+  }
+  return messages
+}
 
 async function maybeSummarize() {
   if (_summarizing) return
+  ensureSummaryLoaded()
+
   const allMessages = getMessages()
   const totalChars = allMessages.reduce((sum, m) => sum + (m.content?.length || 0), 0)
   if (totalChars < CONTEXT_CHAR_THRESHOLD) return
 
-  const olderMessages = allMessages.slice(0, allMessages.length - SUMMARY_KEEP_RECENT)
+  const recentMessages = keepRecentByChars(allMessages)
+  const recentIds = new Set(recentMessages.map((m) => m.id))
+  const olderMessages = allMessages.filter((m) => !recentIds.has(m.id))
   if (olderMessages.length === 0) return
 
   _summarizing = true
@@ -290,7 +281,12 @@ async function maybeSummarize() {
 
     _conversationSummary = summary
     _summaryCoversUpToId = olderMessages[olderMessages.length - 1]?.id || null
-    _sessionActive = false
+
+    try {
+      saveSummaryCheckpoint(_conversationSummary, _summaryCoversUpToId)
+    } catch (err) {
+      logger.warn('[chat] Failed to persist summary:', err.message)
+    }
   } catch (err) {
     logger.warn('[chat] Summarization failed:', err.message)
   } finally {
@@ -299,6 +295,8 @@ async function maybeSummarize() {
 }
 
 function buildContextHistory(allMessages) {
+  ensureSummaryLoaded()
+
   if (!_conversationSummary || !_summaryCoversUpToId) {
     return allMessages.map((m) => ({ role: m.role, content: m.content }))
   }
@@ -331,7 +329,7 @@ async function prepareMessage(content) {
 
   injectUnreportedTasks()
 
-  const storedHistory = _sessionActive ? [] : buildContextHistory(sanitizeHistory(getMessages()))
+  const storedHistory = buildContextHistory(sanitizeHistory(getMessages()))
   const toolDefinitions = getToolDefinitions()
 
   return {
@@ -355,7 +353,6 @@ export async function sendMessage({ content }) {
 
   waitForChatResult(requestId)
     .then(({ finalText, streamId }) => {
-      _sessionActive = true
       if (finalText) {
         const row = appendMessage('assistant', finalText)
         void maybeSummarize()
@@ -404,9 +401,14 @@ export function abort() {
 }
 
 export async function clearConversation() {
-  _sessionActive = false
   _conversationSummary = null
   _summaryCoversUpToId = null
+  _summaryLoaded = true
+  try {
+    clearSummaryCheckpoint()
+  } catch {
+    /* */
+  }
   await clearChat()
   clearMessages()
   emitAll('chat:event', { type: 'msg:replace-all', data: { messages: [], hasMore: false } })

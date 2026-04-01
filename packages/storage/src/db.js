@@ -73,7 +73,19 @@ function prepareDb(db) {
   try {
     db.exec(`ALTER TABLE tasks ADD COLUMN reported INTEGER NOT NULL DEFAULT 0`)
   } catch {
-    /* column may already exist */
+    /* */
+  }
+
+  try {
+    db.exec(`ALTER TABLE conversations ADD COLUMN context_summary TEXT`)
+  } catch {
+    /* */
+  }
+
+  try {
+    db.exec(`ALTER TABLE conversations ADD COLUMN context_checkpoint_id INTEGER`)
+  } catch {
+    /* */
   }
 
   try {

@@ -1,6 +1,6 @@
 {
   "name": "@vox-ai-app/tools",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "license": "MIT",
   "description": "Tool infrastructure, builtins, docs, and definitions for Vox",
@@ -30,8 +30,8 @@
     "electron": ">=28.0.0"
   },
   "dependencies": {
-    "@vox-ai-app/mcp": "^1.0.0",
-    "@vox-ai-app/parser": "^1.0.0",
+    "@vox-ai-app/mcp": "^1.0.1",
+    "@vox-ai-app/parser": "^1.0.1",
     "docx": "^9.6.0",
     "html-to-text": "^9.0.5",
     "pdf-lib": "^1.17.1",

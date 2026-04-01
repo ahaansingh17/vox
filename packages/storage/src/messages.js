@@ -182,3 +182,32 @@ export function clearMessages(db, conversationId = DEFAULT_CONVERSATION_ID) {
     )
     .run(id)
 }
+
+export function saveSummaryCheckpoint(
+  db,
+  summary,
+  checkpointId,
+  conversationId = DEFAULT_CONVERSATION_ID
+) {
+  const id = getConversationId(conversationId)
+  ensureConversation(db, id)
+  db.prepare(
+    `UPDATE conversations SET context_summary = ?, context_checkpoint_id = ?, updated_at = ? WHERE id = ?`
+  ).run(summary, checkpointId, new Date().toISOString(), id)
+}
+
+export function loadSummaryCheckpoint(db, conversationId = DEFAULT_CONVERSATION_ID) {
+  const id = getConversationId(conversationId)
+  const row = db
+    .prepare(`SELECT context_summary, context_checkpoint_id FROM conversations WHERE id = ?`)
+    .get(id)
+  if (!row || !row.context_summary) return null
+  return { summary: row.context_summary, checkpointId: row.context_checkpoint_id }
+}
+
+export function clearSummaryCheckpoint(db, conversationId = DEFAULT_CONVERSATION_ID) {
+  const id = getConversationId(conversationId)
+  db.prepare(
+    `UPDATE conversations SET context_summary = NULL, context_checkpoint_id = NULL, updated_at = ? WHERE id = ?`
+  ).run(new Date().toISOString(), id)
+}

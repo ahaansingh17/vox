@@ -1,4 +1,4 @@
-import { registerHandler, createHandler } from '../ipc/shared'
+import { registerHandler, createHandler, emitAll } from '../ipc/shared'
 import {
   listModels,
   getActiveModelPath,
@@ -40,7 +40,14 @@ export function registerModelsIpc() {
   registerHandler(
     'models:pull',
     createHandler(async (_e, { hfRepo, hfFile }) => {
-      downloadModel({ hfRepo, hfFile }).catch(() => {})
+      downloadModel({ hfRepo, hfFile }).catch((err) => {
+        emitAll('models:progress', {
+          path: null,
+          filename: hfFile,
+          percent: -1,
+          error: err.message
+        })
+      })
       return { started: true }
     })
   )
@@ -55,8 +62,8 @@ export function registerModelsIpc() {
 
   registerHandler(
     'models:delete',
-    createHandler((_e, { path }) => {
-      deleteModel(path)
+    createHandler(async (_e, { path }) => {
+      await deleteModel(path)
       return { deleted: true }
     })
   )

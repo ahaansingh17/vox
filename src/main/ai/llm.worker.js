@@ -196,7 +196,6 @@ async function handleChatSend({ requestId, message, systemPrompt, history, toolD
 
   if (chat.controller) {
     chat.controller.abort()
-    chat.session = null
   }
   const controller = new AbortController()
   chat.controller = controller
@@ -398,7 +397,6 @@ parentPort.on('message', async (msg) => {
     case 'chat:abort':
       if (chat.controller) {
         chat.controller.abort()
-        chat.session = null
       }
       break
     case 'chat:clear':

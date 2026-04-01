@@ -16,6 +16,8 @@ const JOURNAL_TOOL_NAME = 'update_journal'
 const STALL_GIVE_UP_THRESHOLD = 6
 const MAX_COMPRESSION_ATTEMPTS = 2
 const MAX_ITERATIONS = 50
+const MAX_PLANNING_ITERATIONS = 5
+const MAX_NO_PROGRESS_ITERATIONS = 3
 
 function isContextLengthError(err) {
   return /context|token|length|exceed/i.test(err?.message || '')
@@ -235,6 +237,9 @@ export async function runAgentLocal({
   let pendingCorrection = null
   let compressionAttempts = 0
   let iterations = 0
+  let planningIterations = 0
+  let noProgressCount = 0
+  let lastJournalSnapshot = JSON.stringify(journal)
 
   while (true) {
     if (signal?.aborted) throw new Error('Task cancelled')
@@ -318,6 +323,23 @@ export async function runAgentLocal({
       emit({ type: 'thought', content: pendingThought.trim() })
     }
 
+    const currentSnapshot = JSON.stringify(journal)
+    if (currentSnapshot === lastJournalSnapshot) {
+      noProgressCount++
+      if (noProgressCount >= MAX_NO_PROGRESS_ITERATIONS) {
+        emit({
+          type: 'thought',
+          content: 'No progress after multiple iterations — journal unchanged. Stopping.'
+        })
+        journal.done = true
+        journal.doneReason = 'Agent could not make progress on this task.'
+        break
+      }
+    } else {
+      noProgressCount = 0
+      lastJournalSnapshot = currentSnapshot
+    }
+
     const repetition = repetitionDetector.detectRepetition()
     if (repetition) {
       if (repetition.type === 'same_failing_action') break
@@ -325,6 +347,19 @@ export async function runAgentLocal({
     }
 
     updatePlanningState(state, journal)
+
+    if (!state.planningComplete) {
+      planningIterations++
+      if (planningIterations >= MAX_PLANNING_ITERATIONS) {
+        emit({
+          type: 'thought',
+          content: 'Unable to form a plan after multiple attempts. Stopping.'
+        })
+        journal.done = true
+        journal.doneReason = 'Failed to create an execution plan for this task.'
+        break
+      }
+    }
 
     if (journal.done) break
 

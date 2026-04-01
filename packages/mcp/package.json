@@ -1,6 +1,6 @@
 {
   "name": "@vox-ai-app/mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "license": "MIT",
   "description": "MCP (Model Context Protocol) client for Vox — connect to stdio, SSE, and HTTP servers",

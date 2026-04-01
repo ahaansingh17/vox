@@ -1,4 +1,5 @@
 import { makeMcpExecutor } from './mcp-executor.js'
+import { validateArgs } from './schema.js'
 
 const flat = new Map()
 const mcpSlots = new Map()
@@ -124,6 +125,8 @@ export const run = async (toolName, args, { signal } = {}) => {
   const name = String(toolName || '')
   const entry = flat.get(name)
   if (!entry) throw new Error(`Unknown desktop tool: ${toolName}`)
+  const issues = validateArgs(entry.parameters, args ?? {})
+  if (issues.length) throw new Error(`Invalid args for "${name}": ${issues.join('; ')}`)
   return entry.execute(args ?? {}, {
     signal
   })

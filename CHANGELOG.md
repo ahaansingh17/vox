@@ -7,6 +7,33 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.0.2] - 2026-04-01
+
+### Added
+
+- **`edit_local_file` tool** — targeted string replacement in files without rewriting the entire file. Supports `replace_all` for multi-match edits.
+- **`grep_local` tool** — regex search across files with context lines, glob filtering, and configurable result limits.
+- **`glob_local` tool** — find files by glob pattern across directories.
+- **Argument validation** — the tool registry now validates arguments against each tool's parameter schema before execution (type checks, enums, min/max, minLength/maxLength).
+- **Line-range reads** — `read_local_file` supports `startLine`/`endLine` for reading specific line ranges.
+- **Background commands** — `run_local_command` supports `background: true` for long-running processes like servers and watch modes.
+- **File staleness checks** — writes and edits track mtime from the last read and warn about concurrent modifications.
+- **SSRF DNS resolution check** — `fetch_webpage` resolves hostnames and rejects responses where the DNS result points to a private IP address.
+- **Redirect detection** — `fetch_webpage` uses manual redirect mode and surfaces redirect targets instead of following them silently.
+- **Shell dangerous pattern detection** — commands containing `rm -rf /`, `mkfs`, `dd if=`, `:(){ :|:& };:`, and similar patterns are rejected.
+- **Write path restrictions** — writes to system directories (`/etc`, `/System`, `/usr`, `/bin`, etc.) are blocked.
+- **Device file blocking** — reads and writes to device files (`/dev/`, `/proc/`, `/sys/`) are rejected.
+- **Symlink traversal protection** — `delete_local_path` resolves symlinks via `realpath` before checking path restrictions.
+- **Read-only tool classification** — tools declare `readOnly: true` to enable safe parallel execution by the agent.
+- **Similar file suggestions** — when a read or write targets a non-existent file, nearby files with similar names are suggested.
+- **`@vox-ai-app/storage`** — new package for local message, task, and config persistence via SQLite. First publish.
+
+### Changed
+
+- `@vox-ai-app/tools` `ALL_BUILTIN_TOOLS` now includes `editLocalFileTool`, `grepLocalTool`, and `globLocalTool`.
+- `read_local_file` now throws on unsupported formats and missing files instead of returning empty content.
+- `run_local_command` streams stdout/stderr and emits progress events during execution.
+
 ## [1.0.1] - 2026-03-25
 
 ### Added

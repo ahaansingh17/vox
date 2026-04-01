@@ -8,19 +8,24 @@ function formatBytes(bytes) {
 
 const SUGGESTED = [
   {
-    label: 'Qwen 2.5 3B (fast, ~2 GB)',
-    hfRepo: 'Qwen/Qwen2.5-3B-Instruct-GGUF',
-    hfFile: 'qwen2.5-3b-instruct-q4_k_m.gguf'
+    label: 'Qwen 3 4B (recommended, ~2.5 GB)',
+    hfRepo: 'Qwen/Qwen3-4B-GGUF',
+    hfFile: 'Qwen3-4B-Q4_K_M.gguf'
   },
   {
-    label: 'Llama 3.2 3B (~2 GB)',
-    hfRepo: 'bartowski/Llama-3.2-3B-Instruct-GGUF',
-    hfFile: 'Llama-3.2-3B-Instruct-Q4_K_M.gguf'
+    label: 'Qwen 3 8B (stronger, ~5 GB)',
+    hfRepo: 'Qwen/Qwen3-8B-GGUF',
+    hfFile: 'Qwen3-8B-Q4_K_M.gguf'
   },
   {
-    label: 'Mistral 7B (~4 GB)',
-    hfRepo: 'TheBloke/Mistral-7B-Instruct-v0.2-GGUF',
-    hfFile: 'mistral-7b-instruct-v0.2.Q4_K_M.gguf'
+    label: 'Qwen 3 14B (high quality, ~9 GB)',
+    hfRepo: 'Qwen/Qwen3-14B-GGUF',
+    hfFile: 'Qwen3-14B-Q4_K_M.gguf'
+  },
+  {
+    label: 'Qwen 3 32B (best local, ~20 GB)',
+    hfRepo: 'Qwen/Qwen3-32B-GGUF',
+    hfFile: 'Qwen3-32B-Q4_K_M.gguf'
   }
 ]
 
@@ -29,6 +34,7 @@ export default function ModelSettingsPanel() {
   const [activeModel, setActiveModel] = useState(null)
   const [downloads, setDownloads] = useState({})
   const [feedback, setFeedback] = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(null)
 
   const refresh = useCallback(async () => {
     try {
@@ -55,9 +61,16 @@ export default function ModelSettingsPanel() {
       })
       .catch(() => {})
 
-    const unsub = window.api.models.onProgress?.((ev) => {
+    const unsubProgress = window.api.models.onProgress?.((ev) => {
       const filename = ev.path?.split('/').pop() ?? ev.filename
-      if (ev.percent >= 100) {
+      if (ev.percent === -1) {
+        setDownloads((prev) => {
+          const n = { ...prev }
+          delete n[filename]
+          return n
+        })
+        setFeedback({ type: 'error', text: ev.error || 'Download failed.' })
+      } else if (ev.percent >= 100) {
         setDownloads((prev) => {
           const n = { ...prev }
           delete n[filename]
@@ -68,7 +81,14 @@ export default function ModelSettingsPanel() {
         setDownloads((prev) => ({ ...prev, [filename]: { percent: ev.percent, path: ev.path } }))
       }
     })
-    return () => unsub?.()
+    const unsubNoModel = window.api.models.onNoModel?.(() => {
+      setActiveModel(null)
+      setModels([])
+    })
+    return () => {
+      unsubProgress?.()
+      unsubNoModel?.()
+    }
   }, [refresh])
 
   const showFeedback = (type, text) => {
@@ -86,11 +106,13 @@ export default function ModelSettingsPanel() {
     }
   }
 
-  const handleDelete = async (path) => {
+  const handleDeleteConfirm = async (path) => {
+    setConfirmDelete(null)
     try {
       await window.api.models.delete(path)
       if (activeModel === path) setActiveModel(null)
       setModels((prev) => prev.filter((m) => m.path !== path))
+      refresh()
     } catch (e) {
       showFeedback('error', e?.message || 'Failed to delete.')
     }
@@ -194,14 +216,34 @@ export default function ModelSettingsPanel() {
                       Use
                     </button>
                   )}
-                  <button
-                    className="chat-task-card-btn"
-                    onClick={() => handleDelete(m.path)}
-                    style={{ color: 'rgba(255,100,100,0.75)' }}
-                    type="button"
-                  >
-                    Delete
-                  </button>
+                  {confirmDelete === m.path ? (
+                    <>
+                      <button
+                        className="chat-task-card-btn"
+                        onClick={() => handleDeleteConfirm(m.path)}
+                        style={{ color: 'rgba(255,100,100,0.9)', fontWeight: 600 }}
+                        type="button"
+                      >
+                        Confirm
+                      </button>
+                      <button
+                        className="chat-task-card-btn"
+                        onClick={() => setConfirmDelete(null)}
+                        type="button"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      className="chat-task-card-btn"
+                      onClick={() => setConfirmDelete(m.path)}
+                      style={{ color: 'rgba(255,100,100,0.75)' }}
+                      type="button"
+                    >
+                      Delete
+                    </button>
+                  )}
                 </div>
               </div>
             )

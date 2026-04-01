@@ -23,6 +23,7 @@ vox/
 │   ├── voice/            @vox-ai-app/voice
 │   ├── indexing/         @vox-ai-app/indexing
 │   ├── parser/           @vox-ai-app/parser
+│   ├── storage/          @vox-ai-app/storage
 │   └── ui/               @vox-ai-app/ui
 └── package.json
 ```
@@ -44,6 +45,7 @@ npm run dev       # starts the app with hot reload
 @vox-ai-app/voice     (standalone — wake word + voice window)
 @vox-ai-app/indexing  (standalone — file indexing runtime)
 @vox-ai-app/parser    (standalone — document parsing)
+@vox-ai-app/storage   (standalone — local persistence)
 @vox-ai-app/ui        (standalone — React components)
 ```
 
@@ -60,7 +62,7 @@ The app currently runs on macOS. This is not a permanent constraint — it refle
 
 **What is already cross-platform:**
 
-- `@vox-ai-app/mcp`, `@vox-ai-app/tools`, `@vox-ai-app/voice`, `@vox-ai-app/indexing`, `@vox-ai-app/parser`, `@vox-ai-app/ui` — all pure Node.js / React, no OS-specific code
+- `@vox-ai-app/mcp`, `@vox-ai-app/tools`, `@vox-ai-app/voice`, `@vox-ai-app/indexing`, `@vox-ai-app/parser`, `@vox-ai-app/storage`, `@vox-ai-app/ui` — all pure Node.js / React, no OS-specific code
 
 **How to add Windows or Linux support:**
 

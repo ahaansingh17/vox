@@ -1,12 +1,9 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowUp, Check, ChevronDown, Copy, Square } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import { ArrowUp, ChevronDown, Square } from 'lucide-react'
 import { getGreeting } from '../helpers'
 import { useMessageCache, useChatStreamStatus } from '../../shared/hooks/useChat'
 import { useTextareaAutosize } from '../../shared/hooks/useTextareaAutosize'
-
-const REMARK_PLUGINS = [remarkGfm]
+import OverlayMessage from './OverlayMessage'
 const OVERLAY_INPUT_MAX_HEIGHT = 100
 
 const OverlayComposer = memo(function OverlayComposer({ phase }) {
@@ -242,87 +239,9 @@ export default function OverlayChatView() {
                 </div>
               </div>
             )}
-            {messages.map((msg) => {
-              if (msg.role === 'pill') {
-                return (
-                  <div
-                    key={msg.id}
-                    className={`overlay-activity-pill ${
-                      msg.pillType === 'success'
-                        ? 'overlay-activity-pill-success'
-                        : msg.pillType === 'error'
-                          ? 'overlay-activity-pill-error'
-                          : 'overlay-activity-pill-tool'
-                    }`}
-                  >
-                    {msg.pillType === 'tool' && (
-                      <span className="overlay-pill-icon">&#x1f527;</span>
-                    )}
-                    {msg.pillType === 'success' && (
-                      <span className="overlay-pill-icon">&#x2713;</span>
-                    )}
-                    {msg.pillType === 'error' && (
-                      <span className="overlay-pill-icon">&#x2717;</span>
-                    )}
-                    <span>{msg.content}</span>
-                  </div>
-                )
-              }
-
-              if (msg.role === 'system' || msg.role === 'notification') {
-                return (
-                  <div key={msg.id} className="overlay-msg overlay-msg-system">
-                    {msg.content}
-                  </div>
-                )
-              }
-
-              if (msg.role === 'user') {
-                return (
-                  <div key={msg.id} className="overlay-msg overlay-msg-user">
-                    {msg.content}
-                  </div>
-                )
-              }
-
-              return (
-                <div key={msg.id} className="overlay-msg overlay-msg-assistant">
-                  {msg.pending && !msg.content?.trim() ? (
-                    <div className="overlay-thinking-container">
-                      <div className="overlay-thinking-dots">
-                        <span />
-                        <span />
-                        <span />
-                      </div>
-                      <span className="overlay-thinking-text">Thinking</span>
-                    </div>
-                  ) : msg.pending ? (
-                    <p className="overlay-msg-pending" style={{ margin: 0 }}>
-                      {msg.content}
-                    </p>
-                  ) : (
-                    <ReactMarkdown remarkPlugins={REMARK_PLUGINS}>{msg.content}</ReactMarkdown>
-                  )}
-                  {!msg.pending && msg.content?.trim() && (
-                    <button
-                      className={`overlay-copy-btn${copiedId === msg.id ? ' overlay-copy-btn-done' : ''}`}
-                      onClick={() => handleCopy(msg.id, msg.content)}
-                      type="button"
-                    >
-                      {copiedId === msg.id ? (
-                        <>
-                          <Check size={10} /> Copied
-                        </>
-                      ) : (
-                        <>
-                          <Copy size={10} /> Copy
-                        </>
-                      )}
-                    </button>
-                  )}
-                </div>
-              )
-            })}
+            {messages.map((msg) => (
+              <OverlayMessage key={msg.id} msg={msg} copiedId={copiedId} onCopy={handleCopy} />
+            ))}
           </div>
           {!isAtBottom && (
             <button

@@ -1,13 +1,15 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { totalmem } from 'os'
-import { readdirSync, statSync, mkdirSync, existsSync } from 'fs'
+import { readdirSync, statSync, mkdirSync, existsSync, unlinkSync } from 'fs'
+import { execSync } from 'child_process'
 import { storeGet, storeSet, storeDelete } from '../storage/store'
 import { emitAll } from '../ipc/shared'
 import { logger } from '../logger'
 
 const STORE_KEY_ACTIVE = 'activeModelPath'
 const STORE_KEY_REGISTRY = 'modelRegistry'
+const MIN_FREE_DISK_GB = 1
 
 export function getModelsDir() {
   const dir = join(app.getPath('userData'), 'models')
@@ -36,6 +38,15 @@ function removeRegistryEntry(path) {
   saveRegistry(registry)
 }
 
+function getFreeDiskBytes() {
+  try {
+    const output = execSync("df -k / | tail -1 | awk '{print $4}'", { encoding: 'utf-8' })
+    return parseInt(output.trim(), 10) * 1024
+  } catch {
+    return Infinity
+  }
+}
+
 export function listModels() {
   const dir = getModelsDir()
   const registry = getRegistry()
@@ -45,9 +56,9 @@ export function listModels() {
     diskFiles = readdirSync(dir)
       .filter((f) => f.endsWith('.gguf'))
       .map((filename) => {
-        const path = join(dir, filename)
-        const size = statSync(path).size
-        return { filename, path, size }
+        const filePath = join(dir, filename)
+        const size = statSync(filePath).size
+        return { filename, path: filePath, size }
       })
   } catch {
     diskFiles = []
@@ -113,6 +124,16 @@ export async function downloadModel({ hfRepo, hfFile, onProgress } = {}) {
     return destPath
   }
 
+  const freeBytes = getFreeDiskBytes()
+  const curated = (await import('./curated.models.js')).CURATED_MODELS
+  const match = curated.find((m) => m.hfFile === hfFile)
+  const requiredBytes = (match?.sizeGB || 5) * 1e9 + MIN_FREE_DISK_GB * 1e9
+  if (freeBytes < requiredBytes) {
+    const freeGB = (freeBytes / 1e9).toFixed(1)
+    const needGB = (requiredBytes / 1e9).toFixed(1)
+    throw new Error(`Not enough disk space. Need ~${needGB} GB free, only ${freeGB} GB available.`)
+  }
+
   logger.info('[models] Starting download:', hfRepo, hfFile)
 
   const downloader = await createModelDownloader({
@@ -145,6 +166,14 @@ export async function downloadModel({ hfRepo, hfFile, onProgress } = {}) {
         }
       }
     })
+  } catch (err) {
+    emitAll('models:progress', {
+      path: destPath,
+      filename: hfFile,
+      percent: -1,
+      error: err.message
+    })
+    throw err
   } finally {
     activeDownloads.delete(destPath)
     downloadProgress.delete(hfFile)
@@ -162,6 +191,13 @@ export async function downloadModel({ hfRepo, hfFile, onProgress } = {}) {
 
   emitAll('models:progress', { path: destPath, filename: hfFile, percent: 100 })
 
+  const active = getActiveModelPath()
+  if (!active) {
+    storeSet(STORE_KEY_ACTIVE, destPath)
+    emitAll('models:auto-activated', { path: destPath, filename: hfFile })
+    logger.info('[models] Auto-activated first model:', destPath)
+  }
+
   logger.info('[models] Download complete:', destPath)
   return destPath
 }
@@ -171,8 +207,20 @@ export function cancelDownload(path) {
   activeDownloads.delete(path)
 }
 
-export function deleteModel(path) {
-  const { unlinkSync } = require('fs')
+export async function deleteModel(path) {
+  const active = storeGet(STORE_KEY_ACTIVE)
+  const isActive = active === path
+
+  if (isActive) {
+    const { clearChat } = await import('./llm.bridge.js')
+    try {
+      await clearChat()
+    } catch {
+      /* worker may not be running */
+    }
+    storeDelete(STORE_KEY_ACTIVE)
+  }
+
   try {
     unlinkSync(path)
   } catch (err) {
@@ -180,25 +228,37 @@ export function deleteModel(path) {
   }
   removeRegistryEntry(path)
 
-  const active = storeGet(STORE_KEY_ACTIVE)
-  if (active === path) storeDelete(STORE_KEY_ACTIVE)
+  if (isActive) {
+    const remaining = listModels()
+    if (remaining.length > 0) {
+      storeSet(STORE_KEY_ACTIVE, remaining[0].path)
+      const { reloadModel } = await import('./llm.bridge.js')
+      try {
+        await reloadModel(remaining[0].path)
+      } catch {
+        /* will be picked up on next message */
+      }
+    } else {
+      emitAll('models:no-model', {})
+    }
+  }
 }
 
 export function getRecommendedModel() {
   const gb = totalmem() / 1073741824
-  if (gb >= 16)
+  if (gb >= 64)
     return {
-      hfRepo: 'bartowski/Meta-Llama-3.1-8B-Instruct-GGUF',
-      hfFile: 'Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf'
+      hfRepo: 'Qwen/Qwen3-32B-GGUF',
+      hfFile: 'Qwen3-32B-Q4_K_M.gguf'
     }
-  if (gb >= 8)
+  if (gb >= 32)
     return {
-      hfRepo: 'bartowski/Llama-3.2-3B-Instruct-GGUF',
-      hfFile: 'Llama-3.2-3B-Instruct-Q4_K_M.gguf'
+      hfRepo: 'Qwen/Qwen3-14B-GGUF',
+      hfFile: 'Qwen3-14B-Q4_K_M.gguf'
     }
   return {
-    hfRepo: 'bartowski/Phi-3.5-mini-instruct-GGUF',
-    hfFile: 'Phi-3.5-mini-instruct-Q4_K_M.gguf'
+    hfRepo: 'Qwen/Qwen3-4B-GGUF',
+    hfFile: 'Qwen3-4B-Q4_K_M.gguf'
   }
 }
 
@@ -212,10 +272,10 @@ export async function pickLocalModel() {
 
   if (result.canceled || result.filePaths.length === 0) return null
 
-  const path = result.filePaths[0]
-  const filename = path.split('/').pop()
-  const size = statSync(path).size
+  const filePath = result.filePaths[0]
+  const filename = filePath.split('/').pop()
+  const size = statSync(filePath).size
 
-  upsertRegistryEntry({ filename, path, size, source: 'local', addedAt: Date.now() })
-  return { filename, path, size }
+  upsertRegistryEntry({ filename, path: filePath, size, source: 'local', addedAt: Date.now() })
+  return { filename, path: filePath, size }
 }

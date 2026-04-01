@@ -1,6 +1,6 @@
 {
   "name": "@vox-ai-app/parser",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "license": "MIT",
   "description": "Document parsing (PDF, DOCX, PPTX, XLSX, ODT, RTF) for Vox",

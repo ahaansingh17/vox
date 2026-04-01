@@ -3,12 +3,125 @@ import voxLogo from '../../assets/vox.svg'
 
 const SLOW_TIMEOUT_MS = 90_000
 
+function formatBytes(bytes) {
+  if (!bytes || bytes <= 0) return '0 MB'
+  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`
+  return `${(bytes / 1e6).toFixed(0)} MB`
+}
+
+function StepIndicator({ number, label, status, percent, detail }) {
+  const isDone = status === 'done'
+  const isActive = status === 'active'
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: '12px',
+        opacity: isDone ? 0.5 : isActive ? 1 : 0.35,
+        transition: 'opacity 0.3s ease'
+      }}
+    >
+      <div
+        style={{
+          width: '24px',
+          height: '24px',
+          borderRadius: '50%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '0.7rem',
+          fontWeight: 700,
+          flexShrink: 0,
+          background: isDone
+            ? 'rgba(140, 220, 140, 0.15)'
+            : isActive
+              ? 'rgba(236, 137, 184, 0.15)'
+              : 'rgba(255, 255, 255, 0.05)',
+          color: isDone ? 'rgba(140, 220, 140, 0.9)' : isActive ? '#ec89b8' : '#5c5a56',
+          border: `1px solid ${isDone ? 'rgba(140, 220, 140, 0.25)' : isActive ? 'rgba(236, 137, 184, 0.3)' : 'rgba(255, 255, 255, 0.06)'}`
+        }}
+      >
+        {isDone ? '✓' : number}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: '0.82rem',
+            fontWeight: 500,
+            color: isDone ? '#6b6965' : isActive ? '#f0ece6' : '#4e4c48',
+            marginBottom: isActive && percent != null ? '8px' : '0'
+          }}
+        >
+          {label}
+          {detail && (
+            <span style={{ fontWeight: 400, color: '#5c5a56', marginLeft: '6px' }}>{detail}</span>
+          )}
+        </div>
+        {isActive && percent != null && (
+          <div style={{ width: '100%' }}>
+            <div
+              style={{
+                width: '100%',
+                height: '6px',
+                background: 'rgba(255, 255, 255, 0.06)',
+                borderRadius: '999px',
+                overflow: 'hidden'
+              }}
+            >
+              <div
+                style={{
+                  height: '100%',
+                  background: '#ec89b8',
+                  borderRadius: '999px',
+                  width: `${percent}%`,
+                  transition: 'width 0.4s ease'
+                }}
+              />
+            </div>
+            <div
+              style={{
+                fontSize: '0.7rem',
+                color: '#5c5a56',
+                marginTop: '4px',
+                textAlign: 'right'
+              }}
+            >
+              {percent}%
+            </div>
+          </div>
+        )}
+        {isActive && percent == null && (
+          <div
+            style={{
+              width: '100%',
+              height: '6px',
+              background: 'rgba(255, 255, 255, 0.06)',
+              borderRadius: '999px',
+              overflow: 'hidden',
+              marginTop: '8px'
+            }}
+          >
+            <div
+              className="setup-progress-fill setup-progress-indeterminate"
+              style={{ height: '100%', background: '#ec89b8', borderRadius: '999px' }}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function SetupScreen({ setupPhase, noModel }) {
   const [sttStatus, setSttStatus] = useState('pending')
   const [sttProgress, setSttProgress] = useState(0)
   const [sttHasProgress, setSttHasProgress] = useState(false)
   const [llmPhase, setLlmPhase] = useState('pending')
   const [llmPercent, setLlmPercent] = useState(0)
+  const [llmDownloaded, setLlmDownloaded] = useState(0)
+  const [llmTotal, setLlmTotal] = useState(0)
   const [errorMsg, setErrorMsg] = useState('')
   const [slow, setSlow] = useState(false)
   const targetRef = useRef(null)
@@ -20,6 +133,8 @@ export default function SetupScreen({ setupPhase, noModel }) {
   const startLlmDownload = async () => {
     setLlmPhase('downloading')
     setLlmPercent(0)
+    setLlmDownloaded(0)
+    setLlmTotal(0)
     setErrorMsg('')
     setSlow(false)
     clearTimeout(slowTimerRef.current)
@@ -56,7 +171,14 @@ export default function SetupScreen({ setupPhase, noModel }) {
     const unsubLlmProgress = window.api.models.onProgress((data) => {
       if (!targetRef.current || data.filename !== targetRef.current.hfFile) return
       const p = data.percent ?? 0
+      if (data.percent === -1) {
+        setLlmPhase('error')
+        setErrorMsg(data.error || 'Download failed.')
+        return
+      }
       setLlmPercent(p)
+      if (data.downloadedBytes) setLlmDownloaded(data.downloadedBytes)
+      if (data.totalBytes) setLlmTotal(data.totalBytes)
       if (p >= 100) {
         clearTimeout(slowTimerRef.current)
         setSlow(false)
@@ -82,22 +204,31 @@ export default function SetupScreen({ setupPhase, noModel }) {
 
   const isError = llmPhase === 'error'
 
-  const overallPercent = (() => {
-    if (sttDone && llmPhase === 'loading') return 98
-    if (sttDone && llmPhase === 'downloading') return 50 + Math.round(llmPercent / 2)
-    if (sttHasProgress && !sttDone) return Math.round(sttProgress / 2)
+  const sttStepStatus = sttDone ? 'done' : 'active'
+  const sttStepPercent = sttHasProgress ? sttProgress : null
+
+  const llmStepStatus = (() => {
+    if (!sttDone) return 'pending'
+    if (llmPhase === 'downloading' || llmPhase === 'loading') return 'active'
+    if (llmPhase === 'pending' && (setupPhase === 'loading-llm' || setupPhase === 'done'))
+      return 'active'
+    if (llmPhase === 'pending') return 'pending'
+    return 'pending'
+  })()
+
+  const llmStepPercent = (() => {
+    if (llmPhase === 'downloading') return llmPercent
+    if (llmPhase === 'loading') return null
+    if (llmStepStatus === 'active') return null
     return null
   })()
 
-  const isIndeterminate = overallPercent === null
-
-  const statusLabel = (() => {
-    if (isError) return null
-    if (llmPhase === 'loading') return 'Almost ready\u2026'
-    if (llmPhase === 'downloading') return `Downloading\u2026 ${overallPercent ?? ''}%`
-    if (sttDone && (llmPhase === 'active' || setupPhase === 'loading-llm'))
-      return 'Getting the AI ready\u2026'
-    return 'Setting up\u2026'
+  const llmDetail = (() => {
+    if (llmPhase === 'downloading' && llmTotal > 0)
+      return `${formatBytes(llmDownloaded)} / ${formatBytes(llmTotal)}`
+    if (llmPhase === 'loading') return 'Initializing model\u2026'
+    if (llmStepStatus === 'active' && llmPhase === 'pending') return 'Loading\u2026'
+    return null
   })()
 
   return (
@@ -119,14 +250,28 @@ export default function SetupScreen({ setupPhase, noModel }) {
             </button>
           </>
         ) : (
-          <div className="setup-progress-wrap">
-            <div className="setup-progress-track">
-              <div
-                className={`setup-progress-fill${isIndeterminate ? ' setup-progress-indeterminate' : ''}`}
-                style={isIndeterminate ? undefined : { width: `${overallPercent}%` }}
-              />
-            </div>
-            <p className="setup-status-label">{statusLabel}</p>
+          <div
+            style={{
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              marginTop: '8px'
+            }}
+          >
+            <StepIndicator
+              number={1}
+              label="Voice engine"
+              status={sttStepStatus}
+              percent={sttStepPercent}
+            />
+            <StepIndicator
+              number={2}
+              label="AI model"
+              status={llmStepStatus}
+              percent={llmStepPercent}
+              detail={llmDetail}
+            />
           </div>
         )}
 

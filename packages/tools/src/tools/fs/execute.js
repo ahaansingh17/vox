@@ -5,9 +5,68 @@ import { randomUUID } from 'crypto'
 import { clampNumber } from '../../core/schema.js'
 import { readDocumentFile, PARSED_EXTENSIONS } from '@vox-ai-app/parser'
 import { resolveLocalPath, isBlockedPath } from './path.js'
+import { readState } from './read.state.js'
 export { resolveLocalPath }
+
+const BLOCKED_DEVICE_PREFIXES = ['/dev/', '/proc/', '/sys/class/', '/sys/block/']
+const BLOCKED_DEVICE_EXACT = new Set([
+  '/dev/zero',
+  '/dev/null',
+  '/dev/random',
+  '/dev/urandom',
+  '/dev/stdin',
+  '/dev/stdout',
+  '/dev/stderr'
+])
+
+function isDevicePath(p) {
+  const normalized = path.resolve(p)
+  if (BLOCKED_DEVICE_EXACT.has(normalized)) return true
+  return BLOCKED_DEVICE_PREFIXES.some((prefix) => normalized.startsWith(prefix))
+}
+
+async function findSimilarFiles(targetPath) {
+  try {
+    const dir = path.dirname(targetPath)
+    const base = path.basename(targetPath).toLowerCase()
+    const entries = await fs.readdir(dir).catch(() => [])
+    return entries
+      .filter((name) => {
+        const lower = name.toLowerCase()
+        if (lower === base) return false
+        const dist = levenshtein(lower, base)
+        return dist <= 3 || lower.includes(base) || base.includes(lower)
+      })
+      .slice(0, 5)
+      .map((name) => path.join(dir, name))
+  } catch {
+    return []
+  }
+}
+
+function levenshtein(a, b) {
+  if (a.length === 0) return b.length
+  if (b.length === 0) return a.length
+  const matrix = []
+  for (let i = 0; i <= b.length; i++) matrix[i] = [i]
+  for (let j = 0; j <= a.length; j++) matrix[0][j] = j
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      const cost = b.charAt(i - 1) === a.charAt(j - 1) ? 0 : 1
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost
+      )
+    }
+  }
+  return matrix[b.length][a.length]
+}
 export async function writeLocalFile(args) {
   const targetPath = resolveLocalPath(args?.path)
+  if (isBlockedPath(targetPath)) {
+    throw new Error('Refusing to write to a system or root directory.')
+  }
   const enc = String(args?.encoding || 'utf8')
     .trim()
     .toLowerCase()
@@ -20,12 +79,26 @@ export async function writeLocalFile(args) {
     await fs.mkdir(path.dirname(targetPath), {
       recursive: true
     })
+  const tracked = readState.get(targetPath)
+  if (tracked && !shouldAppend) {
+    try {
+      const currentStat = await fs.stat(targetPath)
+      if (currentStat.mtimeMs > tracked.mtimeMs) {
+        throw new Error(
+          'File was modified since last read. Re-read the file before writing to avoid overwriting changes.'
+        )
+      }
+    } catch (e) {
+      if (e?.code !== 'ENOENT') throw e
+    }
+  }
   if (shouldAppend) {
     await fs.appendFile(targetPath, buf)
   } else {
     await fs.writeFile(targetPath, buf)
   }
   const stats = await fs.stat(targetPath)
+  readState.set(targetPath, { mtimeMs: stats.mtimeMs })
   return {
     path: targetPath,
     bytesWritten: buf.length,
@@ -36,29 +109,49 @@ export async function writeLocalFile(args) {
 }
 export async function readLocalFile(args) {
   const targetPath = resolveLocalPath(args?.path)
+
+  if (isDevicePath(targetPath)) {
+    throw new Error('Reading device files is not allowed.')
+  }
+
   const enc = String(args?.encoding || 'utf8')
     .trim()
     .toLowerCase()
   const encoding = enc === 'base64' ? 'base64' : 'utf8'
-  const reqOffset = Number(args?.offset)
-  const offset = Number.isFinite(reqOffset) && reqOffset > 0 ? Math.floor(reqOffset) : 0
   const ext = path.extname(targetPath).toLowerCase()
-  const fileStats = await fs.stat(targetPath)
+
+  let fileStats
+  try {
+    fileStats = await fs.stat(targetPath)
+  } catch (e) {
+    if (e?.code === 'ENOENT') {
+      const similar = await findSimilarFiles(targetPath)
+      const hint = similar.length
+        ? ` Did you mean one of these?\n${similar.map((s) => `  - ${s}`).join('\n')}`
+        : ''
+      throw new Error(`File not found: ${targetPath}${hint}`)
+    }
+    throw e
+  }
+
+  readState.set(targetPath, { mtimeMs: fileStats.mtimeMs })
+
+  const useLineRange =
+    encoding !== 'base64' &&
+    !PARSED_EXTENSIONS.has(ext) &&
+    (args?.startLine !== undefined || args?.endLine !== undefined)
+
   if (encoding !== 'base64' && PARSED_EXTENSIONS.has(ext)) {
+    const reqOffset = Number(args?.offset)
+    const offset = Number.isFinite(reqOffset) && reqOffset > 0 ? Math.floor(reqOffset) : 0
     const reqLen = Number(args?.length)
     const length =
       Number.isFinite(reqLen) && reqLen > 0 ? Math.min(Math.floor(reqLen), 60000) : 30000
     const readResult = await readDocumentFile(targetPath)
     if (readResult?.unsupported) {
-      return {
-        path: targetPath,
-        content: '',
-        encoding: 'utf8',
-        format: ext.slice(1),
-        size: fileStats.size,
-        modifiedAt: fileStats.mtime.toISOString(),
-        message: readResult.unsupportedReason || `Could not extract text from ${ext}.`
-      }
+      throw new Error(
+        `Could not extract text from ${ext} file: ${readResult.unsupportedReason || 'unsupported format'}`
+      )
     }
     const fullText = String(readResult?.text || '')
     const content = fullText.slice(offset, offset + length)
@@ -76,8 +169,12 @@ export async function readLocalFile(args) {
       modifiedAt: fileStats.mtime.toISOString()
     }
   }
+
   const fileBuffer = await fs.readFile(targetPath)
+
   if (encoding === 'base64') {
+    const reqOffset = Number(args?.offset)
+    const offset = Number.isFinite(reqOffset) && reqOffset > 0 ? Math.floor(reqOffset) : 0
     const reqLen = Number(args?.length)
     const length =
       Number.isFinite(reqLen) && reqLen > 0 ? Math.min(Math.floor(reqLen), 500000) : 120000
@@ -95,7 +192,29 @@ export async function readLocalFile(args) {
       modifiedAt: fileStats.mtime.toISOString()
     }
   }
+
   const text = fileBuffer.toString('utf8')
+
+  if (useLineRange) {
+    const lines = text.split('\n')
+    const startLine = Math.max(1, Math.floor(Number(args?.startLine) || 1))
+    const endLine = Math.min(lines.length, Math.floor(Number(args?.endLine) || lines.length))
+    const selected = lines.slice(startLine - 1, endLine)
+    const content = selected.join('\n')
+    return {
+      path: targetPath,
+      content,
+      encoding: 'utf8',
+      startLine,
+      endLine,
+      totalLines: lines.length,
+      size: fileStats.size,
+      modifiedAt: fileStats.mtime.toISOString()
+    }
+  }
+
+  const reqOffset = Number(args?.offset)
+  const offset = Number.isFinite(reqOffset) && reqOffset > 0 ? Math.floor(reqOffset) : 0
   const reqLen = Number(args?.length)
   const length = Number.isFinite(reqLen) && reqLen > 0 ? Math.min(Math.floor(reqLen), 60000) : 30000
   const content = text.slice(offset, offset + length)
@@ -172,6 +291,23 @@ export async function deleteLocalPath(args) {
   const force = Boolean(args?.force)
   const dryRun = Boolean(args?.dryRun)
   if (isBlockedPath(targetPath)) throw new Error('Refusing to delete a system or root directory.')
+  let realTarget
+  try {
+    realTarget = await fs.realpath(targetPath)
+  } catch (e) {
+    if (e?.code === 'ENOENT')
+      return {
+        path: targetPath,
+        existed: false,
+        deleted: false,
+        type: 'missing',
+        dryRun
+      }
+    throw e
+  }
+  if (isBlockedPath(realTarget)) {
+    throw new Error('Refusing to delete: symlink resolves to a protected system path.')
+  }
   let existingStats = null
   try {
     existingStats = await fs.lstat(targetPath)

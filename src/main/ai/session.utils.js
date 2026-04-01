@@ -2,29 +2,44 @@ import { z } from 'zod'
 
 export function jsonSchemaToZod(schema) {
   if (!schema) return z.unknown()
-  switch (schema.type) {
-    case 'string':
-      return z.string()
-    case 'number':
-    case 'integer':
-      return z.number()
-    case 'boolean':
-      return z.boolean()
-    case 'array':
-      return z.array(schema.items ? jsonSchemaToZod(schema.items) : z.unknown())
-    case 'object': {
-      if (!schema.properties) return z.record(z.unknown())
-      const required = new Set(schema.required || [])
-      const shape = {}
-      for (const [key, s] of Object.entries(schema.properties)) {
-        const t = jsonSchemaToZod(s)
-        shape[key] = required.has(key) ? t : t.optional()
+
+  function convert(s) {
+    if (!s) return z.unknown()
+    let base
+    switch (s.type) {
+      case 'string':
+        if (s.enum) base = z.enum(s.enum)
+        else base = z.string()
+        break
+      case 'number':
+      case 'integer':
+        base = z.number()
+        break
+      case 'boolean':
+        base = z.boolean()
+        break
+      case 'array':
+        base = z.array(s.items ? convert(s.items) : z.unknown())
+        break
+      case 'object': {
+        if (!s.properties) return z.record(z.unknown())
+        const required = new Set(s.required || [])
+        const shape = {}
+        for (const [key, prop] of Object.entries(s.properties)) {
+          const field = convert(prop)
+          shape[key] = required.has(key) ? field : field.optional()
+        }
+        base = z.object(shape)
+        break
       }
-      return z.object(shape)
+      default:
+        base = z.unknown()
     }
-    default:
-      return z.unknown()
+    if (s.description) base = base.describe(s.description)
+    return base
   }
+
+  return convert(schema)
 }
 
 export async function* sessionPromptGen(session, userPrompt, functions, signal) {

@@ -1,6 +1,7 @@
 export {
   writeLocalFileTool,
   readLocalFileTool,
+  editLocalFileTool,
   listLocalDirectoryTool,
   deleteLocalPathTool,
   getScratchDirTool,
@@ -9,6 +10,7 @@ export {
   resolveLocalPath,
   writeLocalFile,
   readLocalFile,
+  editLocalFile,
   listLocalDirectory,
   deleteLocalPath,
   getScratchDir
@@ -23,7 +25,15 @@ export { fetchWebpageTool, FETCH_TOOL_DEFINITION } from '../tools/fetch/index.js
 import { FS_TOOLS } from '../tools/fs/index.js'
 import { runLocalCommandTool } from '../tools/shell/index.js'
 import { fetchWebpageTool } from '../tools/fetch/index.js'
-export const ALL_BUILTIN_TOOLS = [...FS_TOOLS, runLocalCommandTool, fetchWebpageTool]
+import { grepLocalTool } from '../tools/grep/index.js'
+import { globLocalTool } from '../tools/glob/index.js'
+export const ALL_BUILTIN_TOOLS = [
+  ...FS_TOOLS,
+  runLocalCommandTool,
+  fetchWebpageTool,
+  grepLocalTool,
+  globLocalTool
+]
 export function loadBuiltinTools(ctx = {}, extras = []) {
   const tools = new Map()
   for (const tool of [...ALL_BUILTIN_TOOLS, ...extras]) {

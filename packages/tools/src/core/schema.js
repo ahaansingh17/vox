@@ -15,6 +15,25 @@ export function validateArgs(schema, args) {
     if (expected && actual !== expected) {
       issues.push(`"${key}" must be ${expected}, got ${actual}`)
     }
+    if (def.enum && !def.enum.includes(val)) {
+      issues.push(`"${key}" must be one of: ${def.enum.join(', ')}`)
+    }
+    if (typeof val === 'string') {
+      if (typeof def.minLength === 'number' && val.length < def.minLength) {
+        issues.push(`"${key}" must be at least ${def.minLength} characters`)
+      }
+      if (typeof def.maxLength === 'number' && val.length > def.maxLength) {
+        issues.push(`"${key}" must be at most ${def.maxLength} characters`)
+      }
+    }
+    if (typeof val === 'number') {
+      if (typeof def.minimum === 'number' && val < def.minimum) {
+        issues.push(`"${key}" must be >= ${def.minimum}`)
+      }
+      if (typeof def.maximum === 'number' && val > def.maximum) {
+        issues.push(`"${key}" must be <= ${def.maximum}`)
+      }
+    }
   }
   return issues
 }

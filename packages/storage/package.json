@@ -1,6 +1,6 @@
 {
   "name": "@vox-ai-app/storage",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "type": "module",
   "license": "MIT",
   "description": "Local message and config persistence for Vox",
@@ -19,7 +19,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/vox-ai-app/vox"
+    "url": "git+https://github.com/vox-ai-app/vox.git"
   },
   "files": [
     "src",

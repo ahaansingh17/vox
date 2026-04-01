@@ -4,7 +4,10 @@ import {
   appendMessage as _appendMessage,
   getMessages as _getMessages,
   getMessagesBeforeId as _getMessagesBeforeId,
-  clearMessages as _clearMessages
+  clearMessages as _clearMessages,
+  saveSummaryCheckpoint as _saveSummaryCheckpoint,
+  loadSummaryCheckpoint as _loadSummaryCheckpoint,
+  clearSummaryCheckpoint as _clearSummaryCheckpoint
 } from '@vox-ai-app/storage/messages'
 import { getDb } from './db.js'
 
@@ -16,3 +19,9 @@ export const getMessages = (conversationId, limit) => _getMessages(getDb(), conv
 export const getMessagesBeforeId = (beforeId, conversationId, limit) =>
   _getMessagesBeforeId(getDb(), beforeId, conversationId, limit)
 export const clearMessages = (conversationId) => _clearMessages(getDb(), conversationId)
+export const saveSummaryCheckpoint = (summary, checkpointId, conversationId) =>
+  _saveSummaryCheckpoint(getDb(), summary, checkpointId, conversationId)
+export const loadSummaryCheckpoint = (conversationId) =>
+  _loadSummaryCheckpoint(getDb(), conversationId)
+export const clearSummaryCheckpoint = (conversationId) =>
+  _clearSummaryCheckpoint(getDb(), conversationId)

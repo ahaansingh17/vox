@@ -8,6 +8,13 @@ import {
   upsertTask,
   indexTaskInFts
 } from '../storage/tasks.db'
+import {
+  normalizeLimit,
+  buildTaskObject as _buildTaskObject,
+  buildTaskStatusResponse,
+  buildHistoryTask,
+  buildActivityEvent
+} from './task.builders'
 
 const MAX_CONCURRENT = 1
 const MAX_ACTIVITY_PER_TASK = 500
@@ -26,28 +33,7 @@ export function setToolDefinitionProvider(fn) {
 }
 
 function buildTaskObject(taskId) {
-  const meta = taskMeta.get(taskId)
-  if (!meta) return null
-  const ts = new Date(meta.createdAt).toISOString()
-  return {
-    taskId,
-    status: meta.status,
-    completedCount: 0,
-    currentPlan: meta.currentPlan || '',
-    message: meta.message || '',
-    resultPreview: meta.result ? String(meta.result).slice(0, 200) : '',
-    spawnRequestedAt: ts,
-    spawnedAt: ts,
-    startedAt: ts,
-    completedAt: meta.completedAt || '',
-    failedAt: meta.failedAt || '',
-    spawnInstructions: meta.instructions,
-    instructions: meta.instructions,
-    spawnContext: meta.context || '',
-    spawnArgsPreview: '',
-    history: [],
-    updatedAt: meta.updatedAt || ts
-  }
+  return _buildTaskObject(taskMeta, taskId)
 }
 
 function persistTaskMeta(meta) {
@@ -104,35 +90,6 @@ function hydrateTaskState() {
   }
 }
 
-function buildTaskStatusResponse(task) {
-  if (!task) return null
-
-  return {
-    id: task.taskId,
-    taskId: task.taskId,
-    status: task.status,
-    instructions: task.instructions || task.spawnInstructions || '',
-    result: task.resultPreview || '',
-    created_at: task.spawnedAt || new Date().toISOString(),
-    completed_at: task.completedAt || task.failedAt || '',
-    error: task.message || '',
-    abort_reason: task.message || '',
-    steps: [],
-    current_plan: task.currentPlan || ''
-  }
-}
-
-function buildHistoryTask(task) {
-  return {
-    id: task.taskId,
-    status: task.status,
-    instructions: task.instructions || task.spawnInstructions || '',
-    created_at: task.spawnedAt || new Date().toISOString(),
-    completed_at: task.completedAt || task.failedAt || '',
-    current_plan: task.currentPlan || ''
-  }
-}
-
 function emitTaskCacheSnapshot(type, page, includeActivity = false) {
   const data = {
     tasks: page.tasks,
@@ -144,23 +101,6 @@ function emitTaskCacheSnapshot(type, page, includeActivity = false) {
   }
 
   emitAll('chat:event', { type, data })
-}
-
-function normalizeLimit(limit, fallback = 50) {
-  const parsed = Number.parseInt(limit, 10)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
-}
-
-function buildActivityEvent(taskId, event) {
-  return {
-    id: `activity-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    taskId,
-    type: event.type,
-    name: event.name,
-    rawResult: event.type === 'tool_result' ? event.result || null : null,
-    timestamp: new Date().toISOString(),
-    data: { taskId, ...event }
-  }
 }
 
 function recordActivity(taskId, event) {
@@ -434,12 +374,45 @@ function setStatus(taskId, status, extra = {}) {
   }
   emitAll('task:event', { taskId, type: 'task.status', status, ...extra })
   emitChatTaskEvent('task:updated', taskId)
+  if (['completed', 'failed', 'aborted', 'incomplete'].includes(status)) {
+    notifyWaiters(taskId, status, extra.result || meta?.result || null)
+  }
 }
 
 function emitChatTaskEvent(eventType, taskId) {
   const task = buildTaskObject(taskId)
   if (!task) return
   emitAll('chat:event', { type: eventType, data: { task } })
+}
+
+const _taskWaiters = new Map()
+
+export function waitForTaskCompletion(taskId, timeoutMs = 300000) {
+  const meta = taskMeta.get(taskId)
+  if (meta && ['completed', 'failed', 'aborted', 'incomplete'].includes(meta.status)) {
+    return Promise.resolve({ taskId, status: meta.status, result: meta.result || null })
+  }
+
+  return new Promise((resolve) => {
+    const timer = setTimeout(
+      () => {
+        _taskWaiters.delete(taskId)
+        const m = taskMeta.get(taskId)
+        resolve({ taskId, status: 'timeout', result: m?.result || null })
+      },
+      Math.min(timeoutMs, 600000)
+    )
+
+    _taskWaiters.set(taskId, { resolve, timer })
+  })
+}
+
+function notifyWaiters(taskId, status, result) {
+  const waiter = _taskWaiters.get(taskId)
+  if (!waiter) return
+  _taskWaiters.delete(taskId)
+  clearTimeout(waiter.timer)
+  waiter.resolve({ taskId, status, result: result || null })
 }
 
 export function getTaskDetail(taskId) {

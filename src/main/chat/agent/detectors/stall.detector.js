@@ -4,21 +4,36 @@ export function createStallDetector() {
   let stalledFor = 0
   let lastCompletedCount = 0
   let lastPlan = ''
+  let lastUnderstanding = ''
   let assumptionCheckSent = false
 
   return {
     check(journal, planningComplete) {
       const currentPlan = journal.currentPlan || ''
+      const currentUnderstanding = journal.understanding || ''
       const planUnchanged = currentPlan === lastPlan
       const completedUnchanged = journal.completed.length === lastCompletedCount
+      const understandingUnchanged = currentUnderstanding === lastUnderstanding
 
       lastCompletedCount = journal.completed.length
       lastPlan = currentPlan
+      lastUnderstanding = currentUnderstanding
 
-      if (!planningComplete) return { stalled: false, stalledFor: 0, nudge: null }
-
-      if (!currentPlan && !journal.completed.length) {
-        return { stalled: false, stalledFor: 0, nudge: null }
+      if (!planningComplete) {
+        if (understandingUnchanged && planUnchanged && !currentPlan) {
+          stalledFor++
+          if (stalledFor >= 3) {
+            return {
+              stalled: true,
+              stalledFor,
+              nudge:
+                'You are stuck in the planning phase. You MUST call update_journal with at least understanding and currentPlan filled in. If you cannot plan this task, set done=true with doneReason explaining why.'
+            }
+          }
+        } else {
+          stalledFor = 0
+        }
+        return { stalled: stalledFor > 0, stalledFor, nudge: null }
       }
 
       if (planUnchanged && completedUnchanged) {
@@ -41,6 +56,7 @@ export function createStallDetector() {
       stalledFor = 0
       lastCompletedCount = 0
       lastPlan = ''
+      lastUnderstanding = ''
       assumptionCheckSent = false
     }
   }

@@ -4,7 +4,15 @@ import { randomUUID } from 'crypto'
 import { app } from 'electron'
 import { emitAll } from '../ipc/shared'
 import { logger } from '../logger'
-import { CONTEXT_SIZE } from './config.js'
+import { executeElectronTool } from './llm.tool-executor.js'
+import {
+  resetStreamState,
+  setChatStreamHandlers,
+  clearChatStreamHandlers,
+  handleChatEventForRenderer
+} from './llm.stream.js'
+
+export { setChatStreamHandlers, clearChatStreamHandlers }
 
 let worker = null
 let _status = { ready: false, modelPath: null, loading: false, error: null }
@@ -12,63 +20,11 @@ let _shuttingDown = false
 const pendingRequests = new Map()
 const agentListeners = new Map()
 
-let _activeStreamId = null
-let _voiceTextHandler = null
-let _voiceEndHandler = null
-let _streamBuffer = ''
-let _streamFlushTimer = null
-const MAX_STREAM_BUFFER = 64 * 1024
-
-function flushStreamBuffer() {
-  if (!_streamBuffer || !_activeStreamId) return
-  const content = _streamBuffer
-  _streamBuffer = ''
-  try {
-    emitAll('chat:event', {
-      type: 'msg:stream-chunk',
-      data: { streamId: _activeStreamId, content }
-    })
-    emitAll('chat:event', {
-      type: 'message_chunk',
-      data: { streamId: _activeStreamId, content }
-    })
-  } catch (err) {
-    logger.error('[llm.bridge] flushStreamBuffer failed:', err)
-  }
-}
-
-function scheduleFlush() {
-  if (_streamFlushTimer) return
-  _streamFlushTimer = setTimeout(() => {
-    _streamFlushTimer = null
-    flushStreamBuffer()
-  }, 16)
-}
-
-function resetStreamState() {
-  if (_streamFlushTimer) {
-    clearTimeout(_streamFlushTimer)
-    _streamFlushTimer = null
-  }
-  _streamBuffer = ''
-  _activeStreamId = null
-}
-
 let _restartAttempts = 0
 let _healthCheckInterval = null
 let _missedPongs = 0
 const MAX_RESTART_ATTEMPTS = 3
 const HEALTH_CHECK_INTERVAL_MS = 30_000
-
-export function setChatStreamHandlers(onText, onEnd) {
-  _voiceTextHandler = onText
-  _voiceEndHandler = onEnd
-}
-
-export function clearChatStreamHandlers() {
-  _voiceTextHandler = null
-  _voiceEndHandler = null
-}
 
 function workerPath() {
   const base = app.getAppPath().replace('app.asar', 'app.asar.unpacked')
@@ -154,140 +110,6 @@ function startHealthCheck() {
   }, HEALTH_CHECK_INTERVAL_MS)
 }
 
-const KNOWLEDGE_TOOL_NAMES = new Set([
-  'list_indexed_files',
-  'read_indexed_file',
-  'search_indexed_context'
-])
-
-const SAFE_MODULES = new Set(['path', 'url', 'querystring', 'crypto', 'util', 'buffer', 'os'])
-
-async function executeElectronTool(name, args) {
-  switch (name) {
-    case 'pick_file':
-    case 'get_file_path': {
-      const { dialog } = await import('electron')
-      const result = await dialog.showOpenDialog({
-        properties: ['openFile'],
-        filters: args?.filters
-      })
-      return result.canceled ? null : result.filePaths[0]
-    }
-    case 'pick_directory': {
-      const { dialog } = await import('electron')
-      const result = await dialog.showOpenDialog({ properties: ['openDirectory'] })
-      return result.canceled ? null : result.filePaths[0]
-    }
-    case 'save_user_info': {
-      const { storeGet, storeSet } = await import('../storage/store.js')
-      const current = storeGet('vox.user.info') || {}
-      const key = String(args?.info_key || '').trim()
-      if (!key) return JSON.stringify({ error: 'info_key is required' })
-      current[key] = args?.info_value ?? ''
-      storeSet('vox.user.info', current)
-      return JSON.stringify({ saved: true, key })
-    }
-    case 'spawn_task': {
-      const { enqueueTask } = await import('../chat/task.queue.js')
-      const { getToolDefinitions } = await import('../chat/chat.session.js')
-      const { randomUUID: uuid } = await import('crypto')
-      const taskId = uuid()
-      enqueueTask({
-        taskId,
-        instructions: args?.instructions || '',
-        context: args?.context || '',
-        toolDefinitions: getToolDefinitions()
-      })
-      return JSON.stringify({ taskId, status: 'spawned' })
-    }
-    case 'get_task': {
-      const { getTaskDetail } = await import('../chat/task.queue.js')
-      const detail = getTaskDetail(String(args?.taskId || ''))
-      if (!detail) return JSON.stringify({ error: 'Task not found' })
-      return JSON.stringify(detail)
-    }
-    case 'search_tasks': {
-      const { listTaskHistory } = await import('../chat/task.queue.js')
-      const { searchTasksFts } = await import('../storage/tasks.db.js')
-      if (args?.query) {
-        const results = searchTasksFts(args.query)
-        return JSON.stringify({ tasks: results, has_more: false })
-      }
-      return JSON.stringify(listTaskHistory({ status: args?.status || null }))
-    }
-    default: {
-      if (KNOWLEDGE_TOOL_NAMES.has(name)) {
-        const { listIndexedFilesForTool, readIndexedFileForTool, searchIndexedContextForTool } =
-          await import('@vox-ai-app/indexing')
-        if (name === 'list_indexed_files') return listIndexedFilesForTool(args)
-        if (name === 'read_indexed_file') return readIndexedFileForTool(args)
-        if (name === 'search_indexed_context') return searchIndexedContextForTool(args)
-      }
-
-      const { executeMcpTool, getMcpToolDefinitions } = await import('../mcp/mcp.service.js')
-      const mcpDefs = getMcpToolDefinitions()
-      if (mcpDefs.some((t) => t.name === name)) {
-        return executeMcpTool(name, args)
-      }
-
-      const { storeGet } = await import('../storage/store.js')
-      const customTools = storeGet('customTools') || []
-      const custom = customTools.find((t) => t.name === name && t.is_enabled !== false)
-      if (custom) {
-        if (custom.source_type === 'http_webhook' && custom.webhook_url) {
-          const { getToolSecrets } = await import('../storage/secrets.js')
-          const secrets = getToolSecrets(name)
-          const headers = { 'Content-Type': 'application/json', ...(custom.webhook_headers || {}) }
-          for (const [k, v] of Object.entries(headers)) {
-            if (typeof v === 'string' && v.startsWith('secret:')) {
-              const secretKey = v.slice(7)
-              headers[k] = secrets[secretKey] || v
-            }
-          }
-          const resp = await fetch(custom.webhook_url, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(args || {})
-          })
-          return await resp.text()
-        }
-        if (
-          (custom.source_type === 'js_function' || custom.source_type === 'desktop') &&
-          custom.source_code
-        ) {
-          const { createContext, runInContext } = await import('vm')
-          const { createRequire } = await import('module')
-          const vmRequire = createRequire(import.meta.url)
-          const sandboxedRequire = (mod) => {
-            if (!SAFE_MODULES.has(mod)) {
-              throw new Error(`Module "${mod}" is not allowed in custom tool sandbox`)
-            }
-            return vmRequire(mod)
-          }
-          const sandbox = {
-            args: args || {},
-            require: sandboxedRequire,
-            console: { log: () => {}, warn: () => {}, error: () => {} },
-            Promise,
-            JSON,
-            Math,
-            Date,
-            result: undefined
-          }
-          createContext(sandbox)
-          const wrapped = `(async function(args) { ${custom.source_code} })(args).then(r => { result = r }).catch(e => { result = { error: e.message } })`
-          await runInContext(wrapped, sandbox, { timeout: 10_000 })
-          const result = sandbox.result
-          return typeof result === 'string' ? result : JSON.stringify(result ?? null)
-        }
-        throw new Error(`Custom tool "${name}" has no executable source`)
-      }
-
-      throw new Error(`No handler for tool: ${name}`)
-    }
-  }
-}
-
 function handleWorkerMessage(msg) {
   switch (msg.type) {
     case 'ready':
@@ -367,98 +189,6 @@ function handleWorkerMessage(msg) {
 
     default:
       logger.warn('[llm.bridge] Unknown message from worker:', msg.type)
-  }
-}
-
-function handleChatEventForRenderer(requestId, event) {
-  switch (event.type) {
-    case 'chunk_start': {
-      const streamId = event.streamId || requestId
-      _activeStreamId = streamId
-
-      emitAll('chat:event', { type: 'chunk_start', streamId })
-
-      emitAll('chat:event', {
-        type: 'msg:append',
-        data: {
-          message: {
-            id: `stream-${streamId}`,
-            dbId: null,
-            role: 'assistant',
-            content: '',
-            pending: true,
-            streamId
-          }
-        }
-      })
-      break
-    }
-
-    case 'text': {
-      if (_voiceTextHandler) _voiceTextHandler(event.content)
-      if (_activeStreamId) {
-        _streamBuffer += event.content
-        if (_streamBuffer.length > MAX_STREAM_BUFFER) {
-          flushStreamBuffer()
-        } else {
-          scheduleFlush()
-        }
-      }
-      break
-    }
-
-    case 'chunk_end': {
-      if (_streamFlushTimer) {
-        clearTimeout(_streamFlushTimer)
-        _streamFlushTimer = null
-      }
-      flushStreamBuffer()
-      const streamId = event.streamId || requestId
-      emitAll('chat:event', { type: 'chunk_end', streamId, finalText: event.finalText })
-      if (_voiceEndHandler) _voiceEndHandler(event.finalText || null)
-      _activeStreamId = null
-      break
-    }
-
-    case 'tool_call':
-      emitAll('chat:event', { type: 'tool_call', data: { name: event.name, args: event.args } })
-      break
-
-    case 'tool_result':
-      emitAll('chat:event', {
-        type: 'tool_result',
-        data: { name: event.name, result: event.result }
-      })
-      break
-
-    case 'abort_initiated':
-      resetStreamState()
-      emitAll('chat:event', { type: 'abort_initiated' })
-      if (_voiceEndHandler) _voiceEndHandler(null)
-      break
-
-    case 'error':
-      resetStreamState()
-      emitAll('chat:event', { type: 'error', data: { message: event.message } })
-      if (_voiceEndHandler) _voiceEndHandler(null)
-      break
-
-    case 'usage': {
-      emitAll('chat:event', { type: 'usage', data: event })
-      if (event.inputTokens && event.inputTokens > 0) {
-        const usageRatio = event.inputTokens / (CONTEXT_SIZE / 4)
-        if (usageRatio > 0.7) {
-          emitAll('chat:event', {
-            type: 'context_warning',
-            data: { ratio: usageRatio, message: 'Context window is getting full.' }
-          })
-        }
-      }
-      break
-    }
-
-    default:
-      break
   }
 }
 

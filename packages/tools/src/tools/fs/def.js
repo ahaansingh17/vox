@@ -29,8 +29,9 @@ export const writeLocalFileDef = {
 
 export const readLocalFileDef = {
   name: 'read_local_file',
+  readOnly: true,
   description:
-    "Read a local file from the user's machine. Returns text content (utf8) or base64 for binary files. Supports pagination via offset/length — call again with a higher offset to read more.",
+    "Read a local file from the user's machine. Returns text content (utf8) or base64 for binary files. Supports pagination via offset/length or line-range via startLine/endLine.",
   parameters: {
     type: 'object',
     properties: {
@@ -48,6 +49,15 @@ export const readLocalFileDef = {
         description:
           'Number of characters (utf8, default 30000, max 60000) or bytes (base64, default 120000, max 500000) to return.'
       },
+      startLine: {
+        type: 'integer',
+        description:
+          'Start line number (1-indexed). Use with endLine for line-range reads instead of offset/length.'
+      },
+      endLine: {
+        type: 'integer',
+        description: 'End line number (1-indexed, inclusive). Defaults to end of file if omitted.'
+      },
       encoding: { type: 'string', description: 'Read encoding: utf8 or base64. Defaults to utf8.' }
     },
     required: ['path']
@@ -56,6 +66,7 @@ export const readLocalFileDef = {
 
 export const listLocalDirectoryDef = {
   name: 'list_local_directory',
+  readOnly: true,
   description: "List files and folders from a local directory on the user's machine.",
   parameters: {
     type: 'object',
@@ -95,6 +106,7 @@ export const deleteLocalPathDef = {
 
 export const getScratchDirDef = {
   name: 'get_scratch_dir',
+  readOnly: true,
   description:
     'Create a dedicated temp working directory for this task. Returns the absolute path.',
   parameters: {
