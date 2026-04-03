@@ -1,1 +1,2 @@
-export { default, groupMessages } from './ChatScreenMessages'
+export { default } from './ChatScreenMessages'
+export { groupMessages } from './groupMessages'

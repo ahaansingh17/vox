@@ -173,7 +173,9 @@ export default function ModelSettingsPanel() {
     if (dl?.path) {
       try {
         await window.api.models.cancelDownload(dl.path)
-      } catch {}
+      } catch {
+        // cancel may fail if download already finished
+      }
     }
     setDownloads((prev) => {
       const n = { ...prev }
