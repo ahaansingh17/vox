@@ -73,6 +73,6 @@ jobs:
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: digiiq
-          SENTRY_PROJECT: vox-chat
+          SENTRY_PROJECT: vox-chat-local-app
         with:
           version: ${{ github.ref_name }}
