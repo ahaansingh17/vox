@@ -25,7 +25,7 @@ mac:
     - NSSpeechRecognitionUsageDescription: Vox uses speech recognition to understand your voice commands.
     - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
     - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
-  notarize: false
+  notarize: true
 dmg:
   artifactName: ${name}-${version}.${ext}
 linux:
