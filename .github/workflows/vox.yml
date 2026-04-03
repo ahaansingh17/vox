@@ -75,4 +75,5 @@ jobs:
           SENTRY_ORG: digiiq
           SENTRY_PROJECT: vox-chat-local-app
         with:
-          version: ${{ github.ref_name }}
+          release: ${{ github.ref_name }}
+          ignore_missing: true
