@@ -1,9 +1,20 @@
-import { ipcMain } from 'electron'
+import { ipcMain, systemPreferences, shell } from 'electron'
 import { exec } from 'child_process'
 import fs from 'fs/promises'
 import os from 'os'
 import path from 'path'
 import { getOverlayWindow } from './overlay.window'
+
+const ensureScreenPermission = async () => {
+  const status = systemPreferences.getMediaAccessStatus('screen')
+  if (status === 'granted') return
+  shell.openExternal(
+    'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'
+  )
+  throw new Error(
+    'Screen recording permission required. Please allow access in System Settings → Privacy & Security → Screen Recording, then try again.'
+  )
+}
 
 export function registerOverlayIpc() {
   ipcMain.handle('overlay:hide', () => {
@@ -15,6 +26,8 @@ export function registerOverlayIpc() {
   })
 
   ipcMain.handle('overlay:capture-region', async () => {
+    await ensureScreenPermission()
+
     const win = getOverlayWindow()
 
     if (win && !win.isDestroyed()) {

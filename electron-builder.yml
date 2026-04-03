@@ -18,13 +18,16 @@ nsis:
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
 mac:
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
-    - NSCameraUsageDescription: Application requests access to the device's camera.
-    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
-    - NSSpeechRecognitionUsageDescription: Vox uses speech recognition to understand your voice commands.
-    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
-    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+    NSMicrophoneUsageDescription: Application requests access to the device's microphone.
+    NSScreenCaptureUsageDescription: Application requests access to record the screen.
+    NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
+    NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+    NSContactsUsageDescription: Application requests access to your contacts to help address emails and messages.
+    NSAppleEventsUsageDescription: Application requests permission to automate Mail and Messages on your behalf.
   notarize: true
 dmg:
   artifactName: ${name}-${version}.${ext}
@@ -39,5 +42,7 @@ appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
 publish:
-  provider: generic
-  url: https://example.com/auto-updates
+  provider: github
+  owner: vox-ai-app
+  repo: vox
+  releaseType: release

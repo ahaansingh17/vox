@@ -3,8 +3,23 @@ import os from 'os'
 import path from 'path'
 import { promisify } from 'util'
 import { exec } from 'child_process'
+import { shell } from 'electron'
 
 const execAsync = promisify(exec)
+
+const isAutomationDeniedError = (err) => {
+  const msg = String(err?.message || err?.stderr || '').toLowerCase()
+  return (
+    msg.includes('not allowed to send apple events') ||
+    msg.includes('apple event handler failed') ||
+    msg.includes('-1743') ||
+    msg.includes('access not allowed')
+  )
+}
+
+const openMessagesAutomationSettings = () => {
+  shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Automation')
+}
 
 const writeTmp = async (content, ext) => {
   const file = path.join(os.tmpdir(), `vox_ims_${Date.now()}.${ext}`)
@@ -62,6 +77,17 @@ end tell`
   try {
     await execAsync(`osascript "${scriptFile}"`, { timeout: 15_000 })
     console.info('[imessage] Reply sent to', handle, 'files:', filePaths.length)
+  } catch (err) {
+    if (isAutomationDeniedError(err)) {
+      openMessagesAutomationSettings()
+      throw Object.assign(
+        new Error(
+          'Vox needs permission to control Messages. Please grant it in System Settings → Privacy & Security → Automation → Vox → Messages.'
+        ),
+        { code: 'IMESSAGE_AUTOMATION_REQUIRED' }
+      )
+    }
+    throw err
   } finally {
     await fs.unlink(scriptFile).catch(() => {})
   }
