@@ -16,7 +16,7 @@ function ChatScreen({ user }) {
       sendError: s.sendError
     }))
   )
-  const isConnecting = !isReady && messages.length === 0
+  const showSkeleton = !isReady && messages.length === 0
 
   const sendMessage = useChatStore((s) => s.sendMessage)
   const clearSendError = useChatStore((s) => s.clearSendError)
@@ -32,7 +32,7 @@ function ChatScreen({ user }) {
       <div className="chat-stage-wrap">
         <ChatScreenMessages
           allMessages={messages}
-          isConnecting={isConnecting}
+          showSkeleton={showSkeleton}
           loadingOlder={loadingOlder}
           onChip={handleChip}
           user={user}
@@ -40,7 +40,6 @@ function ChatScreen({ user }) {
           firstItemIndex={firstItemIndex}
           onStartReached={loadOlder}
           onAtBottomChange={setIsAtBottom}
-          historyReady={isReady}
         />
 
         {!isAtBottom && (

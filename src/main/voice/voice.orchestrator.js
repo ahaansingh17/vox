@@ -50,6 +50,12 @@ export function initVoiceOrchestrator() {
   setOnTranscript(handleTranscript)
   setOnHearing(() => {
     if (!active) return
+    if (processing) {
+      aborted = true
+      abortLlm()
+      emitAll('chat:event', { type: 'barge_in', data: {} })
+      logger.info('[voice] Barge-in on hearing — aborting current response')
+    }
     emitAll('chat:event', { type: 'hearing', data: {} })
   })
 }

@@ -50,7 +50,8 @@
   },
   "peerDependencies": {
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-virtuoso": "^4.0.0"
   },
   "dependencies": {
     "lucide-react": "^1.6.0",

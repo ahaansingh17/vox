@@ -107,6 +107,14 @@
     "nums",
     "whereis",
     "pycache",
-    "urandom"
+    "urandom",
+    "xattr",
+    "pids",
+    "webui",
+    "ipull",
+    "mpty",
+    "listme",
+    "grepme",
+    "convos"
   ]
 }

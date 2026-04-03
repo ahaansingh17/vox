@@ -35,6 +35,8 @@ export default function ModelSettingsPanel() {
   const [downloads, setDownloads] = useState({})
   const [feedback, setFeedback] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const [modelLoading, setModelLoading] = useState(false)
+  const [loadPercent, setLoadPercent] = useState(0)
 
   const refresh = useCallback(async () => {
     try {
@@ -62,7 +64,7 @@ export default function ModelSettingsPanel() {
       .catch(() => {})
 
     const unsubProgress = window.api.models.onProgress?.((ev) => {
-      const filename = ev.path?.split('/').pop() ?? ev.filename
+      const filename = ev.filename ?? ev.path?.split('/').pop()
       if (ev.percent === -1) {
         setDownloads((prev) => {
           const n = { ...prev }
@@ -78,16 +80,37 @@ export default function ModelSettingsPanel() {
         })
         refresh()
       } else {
-        setDownloads((prev) => ({ ...prev, [filename]: { percent: ev.percent, path: ev.path } }))
+        setDownloads((prev) => ({
+          ...prev,
+          [filename]: {
+            percent: ev.percent,
+            path: ev.path,
+            downloadedBytes: ev.downloadedBytes,
+            totalBytes: ev.totalBytes
+          }
+        }))
       }
     })
     const unsubNoModel = window.api.models.onNoModel?.(() => {
       setActiveModel(null)
       setModels([])
     })
+    const unsubReady = window.api.models.onReady?.(() => {
+      setModelLoading(false)
+      setLoadPercent(0)
+      refresh()
+    })
+    const unsubLoadProgress = window.api.models.onLoadProgress?.((data) => {
+      if (data.percent != null) {
+        setModelLoading(true)
+        setLoadPercent(data.percent)
+      }
+    })
     return () => {
       unsubProgress?.()
       unsubNoModel?.()
+      unsubReady?.()
+      unsubLoadProgress?.()
     }
   }, [refresh])
 
@@ -98,10 +121,12 @@ export default function ModelSettingsPanel() {
 
   const handleSetActive = async (path) => {
     try {
+      setModelLoading(true)
+      setLoadPercent(0)
       await window.api.models.setActive(path)
       setActiveModel(path)
-      showFeedback('success', 'Model switched — applies on next message.')
     } catch (e) {
+      setModelLoading(false)
       showFeedback('error', e?.message || 'Failed to switch model.')
     }
   }
@@ -127,7 +152,10 @@ export default function ModelSettingsPanel() {
   }
 
   const handleDownload = async ({ hfRepo, hfFile }) => {
-    setDownloads((prev) => ({ ...prev, [hfFile]: { percent: 0, path: null } }))
+    setDownloads((prev) => ({
+      ...prev,
+      [hfFile]: { percent: 0, path: null, downloadedBytes: 0, totalBytes: 0 }
+    }))
     try {
       await window.api.models.pull(hfRepo, hfFile)
     } catch (e) {
@@ -138,6 +166,20 @@ export default function ModelSettingsPanel() {
       })
       showFeedback('error', e?.message || 'Download failed.')
     }
+  }
+
+  const handleCancel = async (hfFile) => {
+    const dl = downloads[hfFile]
+    if (dl?.path) {
+      try {
+        await window.api.models.cancelDownload(dl.path)
+      } catch {}
+    }
+    setDownloads((prev) => {
+      const n = { ...prev }
+      delete n[hfFile]
+      return n
+    })
   }
 
   return (
@@ -151,6 +193,54 @@ export default function ModelSettingsPanel() {
         >
           {feedback.text}
         </p>
+      )}
+
+      {modelLoading && (
+        <div
+          style={{
+            marginBottom: '12px',
+            padding: '10px 12px',
+            borderRadius: '10px',
+            border: '1px solid rgba(236,137,184,0.25)',
+            background: 'rgba(236,137,184,0.04)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+            <span
+              style={{
+                width: '12px',
+                height: '12px',
+                borderRadius: '50%',
+                border: '2px solid rgba(236,137,184,0.2)',
+                borderTopColor: '#ec89b8',
+                display: 'inline-block',
+                animation: 'workspaceButtonSpin 0.8s linear infinite',
+                flexShrink: 0
+              }}
+            />
+            <span style={{ fontSize: '0.82rem', color: 'var(--vox-text-primary)' }}>
+              Loading model\u2026 {loadPercent}%
+            </span>
+          </div>
+          <div
+            style={{
+              height: '4px',
+              borderRadius: '999px',
+              background: 'var(--vox-border-soft)',
+              overflow: 'hidden'
+            }}
+          >
+            <div
+              style={{
+                height: '100%',
+                borderRadius: '999px',
+                background: 'rgba(236,137,184,0.7)',
+                width: `${loadPercent}%`,
+                transition: 'width 0.3s ease'
+              }}
+            />
+          </div>
+        </div>
       )}
 
       {}
@@ -312,26 +402,57 @@ export default function ModelSettingsPanel() {
                         ? `Downloading… ${dl.percent > 0 ? `${dl.percent}%` : ''}`
                         : s.label}
                     </span>
+                    {inProgress && (
+                      <button
+                        className="chat-task-card-btn"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleCancel(s.hfFile)
+                        }}
+                        style={{
+                          fontSize: '0.7rem',
+                          color: 'rgba(255,100,100,0.8)',
+                          padding: '2px 6px',
+                          flexShrink: 0
+                        }}
+                        type="button"
+                      >
+                        Cancel
+                      </button>
+                    )}
                   </button>
                   {inProgress && dl.percent > 0 && (
-                    <div
-                      style={{
-                        height: '3px',
-                        borderRadius: '999px',
-                        background: 'var(--vox-border-soft)',
-                        overflow: 'hidden',
-                        marginTop: '4px'
-                      }}
-                    >
+                    <div style={{ marginTop: '4px' }}>
                       <div
                         style={{
-                          height: '100%',
+                          height: '3px',
                           borderRadius: '999px',
-                          background: 'rgba(236,137,184,0.7)',
-                          width: `${dl.percent}%`,
-                          transition: 'width 0.3s ease'
+                          background: 'var(--vox-border-soft)',
+                          overflow: 'hidden'
                         }}
-                      />
+                      >
+                        <div
+                          style={{
+                            height: '100%',
+                            borderRadius: '999px',
+                            background: 'rgba(236,137,184,0.7)',
+                            width: `${dl.percent}%`,
+                            transition: 'width 0.3s ease'
+                          }}
+                        />
+                      </div>
+                      {dl.totalBytes > 0 && (
+                        <div
+                          style={{
+                            fontSize: '0.68rem',
+                            color: 'var(--vox-text-muted)',
+                            marginTop: '3px',
+                            textAlign: 'right'
+                          }}
+                        >
+                          {formatBytes(dl.downloadedBytes)} / {formatBytes(dl.totalBytes)}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

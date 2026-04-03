@@ -111,6 +111,12 @@ export function useVoiceMode() {
       if (!isActiveRef.current) return
 
       if (event.type === 'hearing') {
+        if (ttsPlayingRef.current) {
+          window.speechSynthesis?.cancel()
+          ttsQueueRef.current = []
+          ttsPlayingRef.current = false
+          setResponseText('')
+        }
         setPhase('hearing')
       }
 

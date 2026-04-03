@@ -1,7 +1,7 @@
 import { app } from 'electron'
-import { join } from 'path'
+import { join, basename } from 'path'
 import { totalmem } from 'os'
-import { readdirSync, statSync, mkdirSync, existsSync, unlinkSync } from 'fs'
+import { readdirSync, statSync, mkdirSync, existsSync, unlinkSync, createWriteStream } from 'fs'
 import { execSync } from 'child_process'
 import { storeGet, storeSet, storeDelete } from '../storage/store'
 import { emitAll } from '../ipc/shared'
@@ -113,15 +113,23 @@ export function getActiveDownloadProgress() {
 }
 
 export async function downloadModel({ hfRepo, hfFile, onProgress } = {}) {
-  const { createModelDownloader } = await import('node-llama-cpp')
-
   const dir = getModelsDir()
   const destPath = join(dir, hfFile)
 
   if (existsSync(destPath)) {
-    logger.info('[models] Already exists:', destPath)
-    emitAll('models:progress', { path: destPath, filename: hfFile, percent: 100 })
-    return destPath
+    const fileSize = statSync(destPath).size
+    if (fileSize < 1024) {
+      logger.warn('[models] Existing file too small, re-downloading:', destPath)
+      try {
+        unlinkSync(destPath)
+      } catch {
+        /* ignore */
+      }
+    } else {
+      logger.info('[models] Already exists:', destPath)
+      emitAll('models:progress', { path: destPath, filename: hfFile, percent: 100 })
+      return destPath
+    }
   }
 
   const freeBytes = getFreeDiskBytes()
@@ -136,37 +144,81 @@ export async function downloadModel({ hfRepo, hfFile, onProgress } = {}) {
 
   logger.info('[models] Starting download:', hfRepo, hfFile)
 
-  const downloader = await createModelDownloader({
-    modelUri: `hf:${hfRepo}/${hfFile}`,
-    dirPath: dir
-  })
-
   const controller = new AbortController()
   activeDownloads.set(destPath, controller)
   downloadProgress.set(hfFile, { percent: 0, path: destPath })
 
+  const url = `https://huggingface.co/${hfRepo}/resolve/main/${hfFile}`
   let lastEmit = 0
+
   try {
-    await downloader.download({
+    const resp = await fetch(url, {
       signal: controller.signal,
-      onProgress: (progress) => {
+      redirect: 'follow'
+    })
+    if (!resp.ok) throw new Error(`Download failed: HTTP ${resp.status}`)
+
+    const totalBytes = parseInt(resp.headers.get('content-length') || '0', 10)
+    let downloadedBytes = 0
+
+    const tmpPath = destPath + '.tmp'
+    const fileStream = createWriteStream(tmpPath)
+
+    const writable = new WritableStream({
+      write(chunk) {
+        downloadedBytes += chunk.byteLength
+        fileStream.write(Buffer.from(chunk))
+
         const now = Date.now()
-        const percent = Math.round((progress.downloadedSize / progress.totalSize) * 100)
-        downloadProgress.set(hfFile, { percent, path: destPath })
+        const percent =
+          totalBytes > 0
+            ? Math.min(100, Math.max(0, Math.round((downloadedBytes / totalBytes) * 100)))
+            : 0
+
+        downloadProgress.set(hfFile, {
+          percent,
+          path: destPath,
+          downloadedBytes,
+          totalBytes
+        })
+
         if (now - lastEmit > 250) {
           lastEmit = now
-          onProgress?.(progress)
+          onProgress?.({ downloadedSize: downloadedBytes, totalSize: totalBytes })
           emitAll('models:progress', {
             path: destPath,
             filename: hfFile,
             percent,
-            downloadedBytes: progress.downloadedSize,
-            totalBytes: progress.totalSize
+            downloadedBytes,
+            totalBytes
           })
         }
+      },
+      close() {
+        fileStream.end()
+      },
+      abort(err) {
+        fileStream.destroy(err)
       }
     })
+
+    await resp.body.pipeTo(writable)
+
+    await new Promise((resolve, reject) => {
+      fileStream.on('finish', resolve)
+      fileStream.on('error', reject)
+      if (fileStream.writableFinished) resolve()
+    })
+
+    const { renameSync } = await import('fs')
+    renameSync(tmpPath, destPath)
   } catch (err) {
+    const tmpPath = destPath + '.tmp'
+    try {
+      unlinkSync(tmpPath)
+    } catch {
+      /* ignore */
+    }
     emitAll('models:progress', {
       path: destPath,
       filename: hfFile,
@@ -180,7 +232,7 @@ export async function downloadModel({ hfRepo, hfFile, onProgress } = {}) {
   }
 
   upsertRegistryEntry({
-    filename: hfFile,
+    filename: basename(destPath),
     path: destPath,
     size: statSync(destPath).size,
     source: 'huggingface',
@@ -259,6 +311,26 @@ export function getRecommendedModel() {
   return {
     hfRepo: 'Qwen/Qwen3-4B-GGUF',
     hfFile: 'Qwen3-4B-Q4_K_M.gguf'
+  }
+}
+
+export function cleanupPartialDownloads() {
+  const dir = getModelsDir()
+  try {
+    const files = readdirSync(dir)
+    for (const f of files) {
+      if (f.endsWith('.tmp') || f.endsWith('.ipull')) {
+        const fullPath = join(dir, f)
+        try {
+          unlinkSync(fullPath)
+          logger.info('[models] Cleaned up partial download:', f)
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  } catch {
+    /* ignore */
   }
 }
 

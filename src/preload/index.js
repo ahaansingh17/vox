@@ -72,7 +72,11 @@ const api = {
     onProgress: (listener) => subscribeToRendererEvent('models:progress', listener),
     onSttStatus: (listener) => subscribeToRendererEvent('models:stt-status', listener),
     onSttProgress: (listener) => subscribeToRendererEvent('models:stt-progress', listener),
-    getDownloads: () => invoke('models:get-downloads')
+    onLoadProgress: (listener) => subscribeToRendererEvent('models:load-progress', listener),
+    onRestarting: (listener) => subscribeToRendererEvent('models:restarting', listener),
+    getDownloads: () => invoke('models:get-downloads'),
+    onEngineStatus: (listener) => subscribeToRendererEvent('engine:status', listener),
+    onEngineProgress: (listener) => subscribeToRendererEvent('engine:progress', listener)
   },
 
   indexing: {
@@ -89,7 +93,10 @@ const api = {
   },
 
   voice: {
-    sendAudio: (buffer) => invoke('voice:send-audio', buffer),
+    sendAudio: (buffer) => {
+      electronAPI.ipcRenderer.send('voice:send-audio', buffer)
+      return Promise.resolve()
+    },
     sessionStart: () => invoke('voice:session-start'),
     sessionEnd: () => invoke('voice:session-end'),
     setIgnoreMouseEvents: (ignore) => electronAPI.ipcRenderer.send('voice:mouse-ignore', ignore),
@@ -103,8 +110,7 @@ const api = {
   },
 
   power: {
-    getKeepAwake: () =>
-      invoke('power:get-keep-awake').then((r) => (typeof r === 'boolean' ? r : Boolean(r?.active))),
+    getKeepAwake: () => invoke('power:get-keep-awake').then((r) => r.active),
     setKeepAwake: (enabled) => invoke('power:set-keep-awake', { enabled })
   },
 

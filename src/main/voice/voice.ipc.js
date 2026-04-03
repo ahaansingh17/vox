@@ -10,14 +10,10 @@ import {
 } from './voice.orchestrator'
 
 export function registerVoiceIpc() {
-  registerHandler(
-    'voice:send-audio',
-    createHandler((_e, arrayBuffer) => {
-      if (!isVoiceModeActive()) return { accepted: false }
-      handleAudioChunk(arrayBuffer)
-      return { accepted: true }
-    })
-  )
+  ipcMain.removeAllListeners('voice:send-audio')
+  ipcMain.on('voice:send-audio', (_event, arrayBuffer) => {
+    if (isVoiceModeActive()) handleAudioChunk(arrayBuffer)
+  })
 
   registerHandler(
     'voice:session-start',

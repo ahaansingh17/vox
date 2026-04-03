@@ -8,7 +8,7 @@ import { buildAgentPrompt } from './prompts/system.prompt.js'
 import { planningPrompt, journalPrompt, postActionPrompt } from './prompts/iteration.prompts.js'
 import { createReadResultTool, storeResult, STORE_THRESHOLD } from './result.store.js'
 import { summarizeIfNeeded } from './summarize.js'
-import { sessionPromptGen, jsonSchemaToZod } from '../../ai/session.utils.js'
+import { streamChat } from '../../ai/llm.client.js'
 import { CONTEXT_KEEP_RECENT_CHARS } from '../../ai/config.js'
 
 const VERIFY_INTERVAL = 3
@@ -23,24 +23,7 @@ function isContextLengthError(err) {
   return /context|token|length|exceed/i.test(err?.message || '')
 }
 
-async function compressSessionHistory(session, summarize) {
-  const raw = await session.getChatHistory()
-  const messages = raw
-    .map((item) => {
-      if (item.type === 'user') return { role: 'user', content: item.text ?? '' }
-      if (item.type === 'model') {
-        return {
-          role: 'assistant',
-          content: Array.isArray(item.response)
-            ? item.response.map((r) => r.text ?? '').join('')
-            : String(item.response ?? '')
-        }
-      }
-      if (item.type === 'system') return { role: 'system', content: item.text ?? '' }
-      return null
-    })
-    .filter(Boolean)
-
+async function compressMessages(messages, summarize) {
   const condensed = await summarizeIfNeeded(messages, {
     threshold: 0,
     keepRecentChars: CONTEXT_KEEP_RECENT_CHARS,
@@ -49,18 +32,7 @@ async function compressSessionHistory(session, summarize) {
       'Summarize this task execution history concisely. Preserve key findings, decisions, tool outputs, and any context needed to continue the task:',
     summaryLabel: 'Summary of earlier work'
   })
-
-  const llamaHistory = condensed
-    .map((m) => {
-      if (m.role === 'user') return { type: 'user', text: m.content }
-      if (m.role === 'assistant')
-        return { type: 'model', response: [{ type: 'text', text: m.content }] }
-      if (m.role === 'system') return { type: 'system', text: m.content }
-      return null
-    })
-    .filter(Boolean)
-
-  await session.setChatHistory(llamaHistory)
+  return condensed
 }
 
 function buildTools(toolMap, ...extraTools) {
@@ -130,31 +102,6 @@ function updatePlanningState(state, journal) {
   return false
 }
 
-function buildSessionFunctions(tools, _taskId, signal, onCall, onResult) {
-  const functions = {}
-  for (const def of tools.definitions) {
-    const safeName = def.name.replace(/[^a-zA-Z0-9_]/g, '_')
-    functions[safeName] = {
-      description: def.description,
-      params: jsonSchemaToZod(def.parameters),
-      handler: async (args) => {
-        if (signal?.aborted) throw new Error('Aborted')
-        onCall?.(def.name, args)
-        let output
-        try {
-          output = await tools.execute(def.name, args, { signal })
-        } catch (err) {
-          output = { error: err.message }
-        }
-        const serialized = typeof output === 'string' ? output : JSON.stringify(output)
-        onResult?.(def.name, serialized)
-        return serialized
-      }
-    }
-  }
-  return functions
-}
-
 export { buildAgentPrompt, fetchPastContext, fetchKnowledgePatterns, recordBlockerPatterns }
 
 async function fetchPastContext(instructions) {
@@ -196,9 +143,9 @@ async function recordBlockerPatterns(journal) {
   }
 }
 
-export async function runAgentLocal({
+export async function runAgentLoop({
   taskId,
-  session,
+  systemPrompt,
   instructions: _instructions,
   context: _context,
   toolDefinitions,
@@ -216,7 +163,7 @@ export async function runAgentLocal({
       def.name,
       {
         definition: def,
-        execute: async (args, opts) => executeToolFn(def.name, args, taskId, opts?.signal)
+        execute: async (args, opts) => executeToolFn(def.name, args, opts?.signal)
       }
     ])
   )
@@ -225,6 +172,8 @@ export async function runAgentLocal({
     emit({ type: 'journal_update', journal: j })
   )
   const tools = withResultStore(buildTools(toolMap, journalTool), taskId)
+
+  const messages = [{ role: 'system', content: systemPrompt }]
 
   const state = {
     planningComplete: false,
@@ -240,6 +189,8 @@ export async function runAgentLocal({
   let planningIterations = 0
   let noProgressCount = 0
   let lastJournalSnapshot = JSON.stringify(journal)
+  let repetitionWarnings = 0
+  let realToolCallCount = 0
 
   while (true) {
     if (signal?.aborted) throw new Error('Task cancelled')
@@ -254,53 +205,83 @@ export async function runAgentLocal({
       pendingCorrection = null
     }
 
-    const iterationToolDefs = state.planningComplete ? tools.definitions : [journalTool.definition]
-    const iterationFunctions = buildSessionFunctions(
-      { definitions: iterationToolDefs, execute: tools.execute },
-      taskId,
-      signal,
-      (name, args) => {
-        state.lastToolName = name
-        state.lastArgs = args
-        emit({ type: 'tool_call', name, args })
-      },
-      (name, result) => {
-        state.lastToolResult = result
-        if (name !== JOURNAL_TOOL_NAME) {
-          repetitionDetector.record(name, state.lastArgs, result)
-          const warnings = validateToolResult(name, result)
-          if (warnings.length) {
-            const prompt = buildValidationPrompt(name, warnings)
-            if (prompt)
-              pendingCorrection = (pendingCorrection ? pendingCorrection + '\n\n' : '') + prompt
-          }
-        }
-        emit({ type: 'tool_result', name, result })
-      }
-    )
+    messages.push({ role: 'user', content: iterationPrompt })
 
+    const iterationToolDefs = state.planningComplete ? tools.definitions : [journalTool.definition]
     let pendingThought = ''
 
     while (true) {
       try {
-        pendingThought = ''
-        for await (const event of sessionPromptGen(
-          session,
-          iterationPrompt,
-          iterationFunctions,
+        let roundText = ''
+        const toolCalls = []
+
+        for await (const event of streamChat({
+          messages,
+          tools: iterationToolDefs,
           signal
-        )) {
-          switch (event.type) {
-            case 'text':
-              pendingThought += event.content
-              emit({ type: 'text', content: event.content })
-              break
-            case 'usage':
-              emit(event)
-              break
+        })) {
+          if (event.type === 'text') {
+            const cleaned = event.content.replace(/<think>[\s\S]*?<\/think>/g, '')
+            if (cleaned) {
+              roundText += cleaned
+              pendingThought += cleaned
+              emit({ type: 'text', content: cleaned })
+            }
+          } else if (event.type === 'tool_call') {
+            toolCalls.push(event)
           }
         }
-        break
+
+        if (toolCalls.length === 0) {
+          if (roundText) messages.push({ role: 'assistant', content: roundText })
+          break
+        }
+
+        const assistantMsg = {
+          role: 'assistant',
+          content: roundText || null,
+          tool_calls: toolCalls.map((tc) => ({
+            id: tc.id || `call_${randomUUID().slice(0, 8)}`,
+            type: 'function',
+            function: { name: tc.name, arguments: JSON.stringify(tc.args) }
+          }))
+        }
+        messages.push(assistantMsg)
+
+        for (let i = 0; i < toolCalls.length; i++) {
+          const tc = toolCalls[i]
+          state.lastToolName = tc.name
+          state.lastArgs = tc.args
+          emit({ type: 'tool_call', name: tc.name, args: tc.args })
+
+          let result
+          try {
+            result = await tools.execute(tc.name, tc.args, { signal })
+          } catch (err) {
+            result = JSON.stringify({ error: err.message })
+          }
+          const serialized = typeof result === 'string' ? result : JSON.stringify(result)
+          state.lastToolResult = serialized
+
+          if (tc.name !== JOURNAL_TOOL_NAME) {
+            realToolCallCount++
+            repetitionDetector.record(tc.name, tc.args, serialized)
+            const warnings = validateToolResult(tc.name, serialized)
+            if (warnings.length) {
+              const prompt = buildValidationPrompt(tc.name, warnings)
+              if (prompt)
+                pendingCorrection = (pendingCorrection ? pendingCorrection + '\n\n' : '') + prompt
+            }
+          }
+
+          emit({ type: 'tool_result', name: tc.name, result: serialized })
+
+          messages.push({
+            role: 'tool',
+            tool_call_id: assistantMsg.tool_calls[i]?.id,
+            content: serialized
+          })
+        }
       } catch (err) {
         if (
           summarize &&
@@ -309,7 +290,9 @@ export async function runAgentLocal({
         ) {
           compressionAttempts++
           try {
-            await compressSessionHistory(session, summarize)
+            const compressed = await compressMessages(messages, summarize)
+            messages.length = 0
+            messages.push(...compressed)
           } catch (compressErr) {
             throw new Error(`Context too large and compression failed: ${compressErr.message}`)
           }
@@ -343,6 +326,13 @@ export async function runAgentLocal({
     const repetition = repetitionDetector.detectRepetition()
     if (repetition) {
       if (repetition.type === 'same_failing_action') break
+      repetitionWarnings++
+      if (repetitionWarnings >= 2) {
+        emit({ type: 'thought', content: 'Stuck in a loop — same action repeated. Stopping.' })
+        journal.done = true
+        journal.doneReason = 'Task stopped due to repeated identical actions.'
+        break
+      }
       pendingCorrection = (pendingCorrection ? pendingCorrection + '\n\n' : '') + repetition.message
     }
 
@@ -361,6 +351,12 @@ export async function runAgentLocal({
       }
     }
 
+    if (journal.done && realToolCallCount === 0) {
+      journal.done = false
+      journal.doneReason = ''
+      pendingCorrection =
+        'You marked done=true but never executed any tools. You must actually perform actions (execute_code, list_directory, etc.) to complete the task — not just plan. Execute your plan now.'
+    }
     if (journal.done) break
 
     const { stalledFor, nudge } = stallDetector.check(journal, state.planningComplete)

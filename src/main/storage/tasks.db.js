@@ -100,7 +100,7 @@ export function searchKnowledgePatterns(query) {
   try {
     return getDb()
       .prepare(
-        `SELECT p.pattern_id, p.trigger, p.solution
+        `SELECT p.id, p.trigger, p.solution
          FROM patterns_fts f
          JOIN knowledge_patterns p ON p.id = f.pattern_id
          WHERE f.patterns_fts MATCH ?
@@ -108,7 +108,7 @@ export function searchKnowledgePatterns(query) {
          LIMIT 5`
       )
       .all(terms)
-      .map((row) => ({ id: row.pattern_id, trigger: row.trigger, solution: row.solution }))
+      .map((row) => ({ id: row.id, trigger: row.trigger, solution: row.solution }))
   } catch {
     return []
   }

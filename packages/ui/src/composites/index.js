@@ -1,6 +1,7 @@
 export { default as ChatMessage, ToolGroup } from './ChatMessage'
 export { default as ChatComposer } from './ChatComposer'
 export { default as ChatEmptyState } from './ChatEmptyState'
+export { default as ChatScreenMessages, groupMessages } from './ChatScreenMessages'
 export { default as ChatSkeleton } from './ChatSkeleton'
 export { default as VoiceOrb } from './VoiceOrb'
 export { TimelineMarker, StepItem } from './ActivityTimeline'

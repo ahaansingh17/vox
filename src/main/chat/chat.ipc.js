@@ -11,7 +11,13 @@ import { getAllTasks, abortTask, getTask } from './task.queue'
 export function registerChatIpc() {
   registerHandler(
     'chat:send-message',
-    createHandler(async (_e, payload) => sendMessage(payload || {}))
+    createHandler(async (_e, payload) => {
+      const _perfId = `[PERF] ipc:chat:send-message #${Date.now()}`
+      console.time(_perfId)
+      const result = await sendMessage(payload || {})
+      console.timeEnd(_perfId)
+      return result
+    })
   )
 
   registerHandler(

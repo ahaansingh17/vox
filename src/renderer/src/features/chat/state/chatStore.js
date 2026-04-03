@@ -14,6 +14,7 @@ const useChatStore = create(
     }
     let _unsubs = []
     let _safetyTimer = null
+    let _initGeneration = 0
 
     const msgBatch = {
       pendingDeltas: {},
@@ -156,7 +157,7 @@ const useChatStore = create(
       }
 
       if (type === 'chunk_start') {
-        session.activeStreamId = event?.streamId || data?.id
+        session.activeStreamId = event.streamId
         if (get().phase !== PHASE.ABORTING) {
           set({ streamStatus: 'Thinking...', phase: PHASE.STREAMING })
         }
@@ -164,7 +165,7 @@ const useChatStore = create(
       }
 
       if (type === 'chunk_end') {
-        const streamId = event?.streamId || data?.id
+        const streamId = event.streamId
         if (streamId !== session.activeStreamId) return
         session.activeStreamId = null
         if (session.abortTimeout) {
@@ -183,9 +184,9 @@ const useChatStore = create(
         return
       }
 
-      if (type === 'task.status') {
-        const rawTaskId = data?.taskId
-        const status = String(data?.status || 'updated').toLowerCase()
+      if (type === 'task:updated' || type === 'task:append') {
+        const rawTaskId = data?.task?.taskId
+        const status = String(data?.task?.status).toLowerCase()
         const isTerminal = ['completed', 'failed', 'aborted', 'incomplete'].includes(status)
 
         if (rawTaskId && !isTerminal) {
@@ -275,7 +276,10 @@ const useChatStore = create(
         session.activeTaskId = null
 
         try {
+          const _perfLabel = `[PERF] renderer:sendMessage #${Date.now()}`
+          console.time(_perfLabel)
           await window.api.chat.sendMessage(content)
+          console.timeEnd(_perfLabel)
         } catch (error) {
           set({
             sendError: error?.message || 'Failed to send message.',
@@ -320,6 +324,9 @@ const useChatStore = create(
       init: async () => {
         if (_unsubs.length > 0) return
 
+        const gen = ++_initGeneration
+        const stale = () => gen !== _initGeneration
+
         const unsubEvent = window.api.chat.onEvent((event) => {
           handlePhaseEvent(event)
           handleMessageEvent(event)
@@ -343,45 +350,59 @@ const useChatStore = create(
         })
         _unsubs.push(unsubStatus)
 
-        try {
-          const data = await window.api?.chat?.getMessages?.()
-          if (data?.messages?.length) {
-            set({
-              messages: data.messages,
-              hasMore: typeof data.hasMore === 'boolean' ? data.hasMore : true,
-              isReady: true
-            })
-          } else {
+        const loadMessages = async () => {
+          try {
+            const data = await window.api?.chat?.getMessages?.()
+            if (stale()) return
+            if (data?.messages?.length) {
+              set({
+                messages: data.messages,
+                hasMore: typeof data.hasMore === 'boolean' ? data.hasMore : true,
+                isReady: true
+              })
+              return
+            }
+          } catch {
+            if (stale()) return
+          }
+          if (!stale()) {
             set({ messages: [], isReady: true })
             window.api?.chat?.ensureConnected?.().catch(() => {})
           }
-        } catch {
-          set({ messages: [], isReady: true })
         }
+
+        await loadMessages()
 
         _safetyTimer = setTimeout(() => {
           if (!get().isReady) set({ isReady: true })
           _safetyTimer = null
         }, 8000)
 
+        if (stale()) return
+
         try {
           const statusData = await window.api.chat.getStatus()
-          set({ chatStatus: toChatStatusState(statusData?.status) })
+          if (!stale()) set({ chatStatus: toChatStatusState(statusData?.status) })
         } catch {
           /* status check is best-effort */
         }
 
+        if (stale()) return
+
         try {
           const connectData = await window.api.chat.ensureConnected()
+          if (stale()) return
           const nextStatus = toChatStatusState(connectData?.status)
           set({ chatStatus: nextStatus })
           if (nextStatus.sessionReady) set({ streamStatus: '' })
         } catch (error) {
-          set({ sendError: error?.message || 'Unable to connect to chat.' })
+          if (!stale()) set({ sendError: error?.message || 'Unable to connect to chat.' })
         }
       },
 
       destroy: () => {
+        _initGeneration++
+
         for (const unsub of _unsubs) {
           if (typeof unsub === 'function') unsub()
         }

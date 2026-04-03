@@ -24,7 +24,7 @@ function prepareDb(db) {
     );
 
     CREATE TABLE IF NOT EXISTS messages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id TEXT PRIMARY KEY,
       conversation_id TEXT NOT NULL,
       role TEXT NOT NULL,
       content TEXT NOT NULL,
@@ -86,6 +86,22 @@ function prepareDb(db) {
     db.exec(`ALTER TABLE conversations ADD COLUMN context_checkpoint_id INTEGER`)
   } catch {
     /* */
+  }
+
+  try {
+    const { randomUUID } = require('crypto')
+    const nullRows = db.prepare(`SELECT rowid FROM messages WHERE id IS NULL OR id = ''`).all()
+    if (nullRows.length > 0) {
+      const update = db.prepare(`UPDATE messages SET id = ? WHERE rowid = ?`)
+      const tx = db.transaction(() => {
+        for (const row of nullRows) {
+          update.run(randomUUID(), row.rowid)
+        }
+      })
+      tx()
+    }
+  } catch {
+    /* migration best-effort */
   }
 
   try {

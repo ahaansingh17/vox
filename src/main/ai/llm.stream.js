@@ -82,6 +82,10 @@ export function handleChatEventForRenderer(requestId, event) {
       if (_voiceTextHandler) _voiceTextHandler(event.content)
       if (_activeStreamId) {
         _streamBuffer += event.content
+        if (_streamFlushTimer) {
+          clearTimeout(_streamFlushTimer)
+          _streamFlushTimer = null
+        }
         if (_streamBuffer.length > MAX_STREAM_BUFFER) {
           flushStreamBuffer()
         } else {
@@ -130,7 +134,7 @@ export function handleChatEventForRenderer(requestId, event) {
     case 'usage': {
       emitAll('chat:event', { type: 'usage', data: event })
       if (event.inputTokens && event.inputTokens > 0) {
-        const usageRatio = event.inputTokens / (CONTEXT_SIZE / 4)
+        const usageRatio = event.inputTokens / CONTEXT_SIZE
         if (usageRatio > 0.7) {
           emitAll('chat:event', {
             type: 'context_warning',

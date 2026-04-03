@@ -82,14 +82,12 @@ export function createJournalTool(journal, onUpdate) {
   return {
     definition,
     execute: () => async (args) => {
+      let rolledBack = false
       if (typeof args.rollbackTo === 'number' && args.rollbackTo >= 0) {
-        if (rollback(args.rollbackTo)) {
-          onUpdate?.(journal)
-          return { ok: true, rolledBackTo: args.rollbackTo, journal }
-        }
+        rolledBack = rollback(args.rollbackTo)
+      } else {
+        saveCheckpoint()
       }
-
-      saveCheckpoint()
 
       if (args.understanding !== undefined) journal.understanding = args.understanding
       if (args.currentPlan !== undefined) journal.currentPlan = args.currentPlan
@@ -117,7 +115,10 @@ export function createJournalTool(journal, onUpdate) {
       if (args.clearBlockers) journal.blockers = []
 
       onUpdate?.(journal)
-      return { ok: true, checkpointIndex: checkpoints.length - 1, journal }
+      const result = { ok: true, journal }
+      if (rolledBack) result.rolledBackTo = args.rollbackTo
+      else result.checkpointIndex = checkpoints.length - 1
+      return result
     }
   }
 }

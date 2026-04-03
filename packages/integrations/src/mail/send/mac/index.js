@@ -9,11 +9,11 @@ import {
 } from '@vox-ai-app/tools/exec'
 import { ensureAppleMailConfigured } from '../../shared/index.js'
 export const sendEmailMac = async (
-  { to, cc, bcc, subject, body, attachments, account },
+  { to, cc = [], bcc = [], subject, body, attachments = [], account },
   { signal } = {}
 ) => {
   await ensureAppleMailConfigured(signal)
-  const bodyEsc = esc(body).replace(/\n/g, '\\n')
+  const bodyEsc = esc(body).replace(/\n/g, '" & return & "')
   const lines = ['tell application "Mail"']
   if (account) {
     lines.push(

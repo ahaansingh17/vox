@@ -9,7 +9,7 @@ import {
 import { ensureAppleMailConfigured } from '../../shared/index.js'
 
 const runAs = async (script, signal) => {
-  await ensureAppleMailConfigured()
+  await ensureAppleMailConfigured(signal)
   const scriptFile = await writeTempScript(script, 'scpt')
   try {
     const { stdout } = await execAbortable(
@@ -53,7 +53,7 @@ export const replyToEmailMac = async (
   { messageId, body, replyAll = false, account },
   { signal } = {}
 ) => {
-  const bodyEsc = esc(body)
+  const bodyEsc = esc(body).replace(/\n/g, '" & return & "')
   const replyCmd = replyAll ? 'reply theMsg with reply to all' : 'reply theMsg'
   const senderLines = account
     ? [
@@ -83,7 +83,7 @@ export const replyToEmailMac = async (
   }
 }
 export const forwardEmailMac = async ({ messageId, to, body = '', account }, { signal } = {}) => {
-  const bodyEsc = esc(body)
+  const bodyEsc = esc(body).replace(/\n/g, '" & return & "')
   const senderLines = account
     ? [
         `  set acct to first account whose name contains "${esc(account)}"`,
@@ -205,11 +205,11 @@ export const createDraftMac = async (
       `  set acct to first account whose name contains "${esc(account)}"`,
       '  set addressesList to email addresses of acct',
       '  set senderAddr to item 1 of addressesList',
-      `  set msg to make new outgoing message with properties {subject:"${esc(subject)}", content:"${esc(body).replace(/\n/g, '\\n')}", visible:true, sender:senderAddr}`
+      `  set msg to make new outgoing message with properties {subject:"${esc(subject)}", content:"${esc(body).replace(/\n/g, '" & return & "')}", visible:true, sender:senderAddr}`
     )
   } else {
     lines.push(
-      `  set msg to make new outgoing message with properties {subject:"${esc(subject)}", content:"${esc(body).replace(/\n/g, '\\n')}", visible:true}`
+      `  set msg to make new outgoing message with properties {subject:"${esc(subject)}", content:"${esc(body).replace(/\n/g, '" & return & "')}", visible:true}`
     )
   }
   lines.push('  tell msg')

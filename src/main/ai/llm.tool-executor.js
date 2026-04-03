@@ -1,13 +1,58 @@
-const KNOWLEDGE_TOOL_NAMES = new Set([
-  'list_indexed_files',
-  'read_indexed_file',
-  'search_indexed_context'
-])
+import { ALL_TOOLS } from '@vox-ai-app/tools'
+import { registerAll, run as runRegistryTool } from '@vox-ai-app/tools/registry'
+import { ALL_INTEGRATION_TOOLS } from '@vox-ai-app/integrations'
+import { ALL_KNOWLEDGE_TOOLS } from '@vox-ai-app/indexing'
+import { logger } from '../logger'
 
 const SAFE_MODULES = new Set(['path', 'url', 'querystring', 'crypto', 'util', 'buffer', 'os'])
 
+registerAll([...ALL_TOOLS, ...ALL_INTEGRATION_TOOLS, ...ALL_KNOWLEDGE_TOOLS])
+
 export async function executeElectronTool(name, args) {
   switch (name) {
+    case 'find_tools': {
+      const { storeGet } = await import('../storage/store.js')
+      const { getMcpToolDefinitions } = await import('../mcp/mcp.service.js')
+      const customTools = storeGet('customTools') || []
+      const query = String(args?.query || '').toLowerCase()
+      const enabled = customTools.filter((t) => t.is_enabled !== false && t.name)
+      const allTools = [
+        ...enabled.map((t) => ({
+          name: t.name,
+          description: t.description || '',
+          source_type: t.source_type || 'unknown',
+          parameters: t.parameters || { type: 'object', properties: {} }
+        })),
+        ...getMcpToolDefinitions().map((t) => ({
+          name: t.name,
+          description: t.description || '',
+          source_type: 'mcp',
+          parameters: t.parameters || { type: 'object', properties: {} }
+        }))
+      ]
+      if (!query) return JSON.stringify({ tools: allTools })
+      const matches = allTools.filter(
+        (t) => t.name.toLowerCase().includes(query) || t.description.toLowerCase().includes(query)
+      )
+      return JSON.stringify({ tools: matches })
+    }
+    case 'run_tool': {
+      const toolName = String(args?.name || '').trim()
+      if (!toolName) return JSON.stringify({ error: 'name is required' })
+      const toolArgs = args?.args || {}
+      const { storeGet } = await import('../storage/store.js')
+      const customTools = storeGet('customTools') || []
+      const custom = customTools.find((t) => t.name === toolName && t.is_enabled !== false)
+      if (custom) return executeCustomTool(custom, toolArgs)
+      const { executeMcpTool, getMcpToolDefinitions } = await import('../mcp/mcp.service.js')
+      const mcpDefs = getMcpToolDefinitions()
+      if (mcpDefs.some((t) => t.name === toolName)) {
+        return executeMcpTool(toolName, toolArgs)
+      }
+      return JSON.stringify({
+        error: `No tool named "${toolName}" found. Call find_tools to discover available tools.`
+      })
+    }
     case 'pick_file':
     case 'get_file_path': {
       const { dialog } = await import('electron')
@@ -65,74 +110,71 @@ export async function executeElectronTool(name, args) {
       return JSON.stringify(listTaskHistory({ status: args?.status || null }))
     }
     default: {
-      if (KNOWLEDGE_TOOL_NAMES.has(name)) {
-        const { listIndexedFilesForTool, readIndexedFileForTool, searchIndexedContextForTool } =
-          await import('@vox-ai-app/indexing')
-        if (name === 'list_indexed_files') return listIndexedFilesForTool(args)
-        if (name === 'read_indexed_file') return readIndexedFileForTool(args)
-        if (name === 'search_indexed_context') return searchIndexedContextForTool(args)
-      }
+      logger.info(`[tool-executor] Dispatching tool: ${name}`)
 
-      const { executeMcpTool, getMcpToolDefinitions } = await import('../mcp/mcp.service.js')
-      const mcpDefs = getMcpToolDefinitions()
-      if (mcpDefs.some((t) => t.name === name)) {
-        return executeMcpTool(name, args)
-      }
-
-      const { storeGet } = await import('../storage/store.js')
-      const customTools = storeGet('customTools') || []
-      const custom = customTools.find((t) => t.name === name && t.is_enabled !== false)
-      if (custom) {
-        if (custom.source_type === 'http_webhook' && custom.webhook_url) {
-          const { getToolSecrets } = await import('../storage/secrets.js')
-          const secrets = getToolSecrets(name)
-          const headers = { 'Content-Type': 'application/json', ...(custom.webhook_headers || {}) }
-          for (const [k, v] of Object.entries(headers)) {
-            if (typeof v === 'string' && v.startsWith('secret:')) {
-              const secretKey = v.slice(7)
-              headers[k] = secrets[secretKey] || v
-            }
-          }
-          const resp = await fetch(custom.webhook_url, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(args || {})
-          })
-          return await resp.text()
+      try {
+        const result = await runRegistryTool(name, args)
+        logger.info(`[tool-executor] Registry handled: ${name}`)
+        return typeof result === 'string' ? result : JSON.stringify(result ?? null)
+      } catch (registryErr) {
+        if (!registryErr?.message?.includes('Unknown desktop tool')) {
+          return JSON.stringify({ error: registryErr.message })
         }
-        if (
-          (custom.source_type === 'js_function' || custom.source_type === 'desktop') &&
-          custom.source_code
-        ) {
-          const { createContext, runInContext } = await import('vm')
-          const { createRequire } = await import('module')
-          const vmRequire = createRequire(import.meta.url)
-          const sandboxedRequire = (mod) => {
-            if (!SAFE_MODULES.has(mod)) {
-              throw new Error(`Module "${mod}" is not allowed in custom tool sandbox`)
-            }
-            return vmRequire(mod)
-          }
-          const sandbox = {
-            args: args || {},
-            require: sandboxedRequire,
-            console: { log: () => {}, warn: () => {}, error: () => {} },
-            Promise,
-            JSON,
-            Math,
-            Date,
-            result: undefined
-          }
-          createContext(sandbox)
-          const wrapped = `(async function(args) { ${custom.source_code} })(args).then(r => { result = r }).catch(e => { result = { error: e.message } })`
-          await runInContext(wrapped, sandbox, { timeout: 10_000 })
-          const result = sandbox.result
-          return typeof result === 'string' ? result : JSON.stringify(result ?? null)
-        }
-        throw new Error(`Custom tool "${name}" has no executable source`)
       }
 
       throw new Error(`No handler for tool: ${name}`)
     }
   }
+}
+
+async function executeCustomTool(custom, toolArgs) {
+  if (custom.source_type === 'http_webhook' && custom.webhook_url) {
+    const { getToolSecrets } = await import('../storage/secrets.js')
+    const secrets = getToolSecrets(custom.name)
+    const headers = { 'Content-Type': 'application/json', ...(custom.webhook_headers || {}) }
+    for (const [k, v] of Object.entries(headers)) {
+      if (typeof v === 'string' && v.startsWith('secret:')) {
+        const secretKey = v.slice(7)
+        headers[k] = secrets[secretKey] || v
+      }
+    }
+    const resp = await fetch(custom.webhook_url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(toolArgs || {}),
+      signal: AbortSignal.timeout(30_000)
+    })
+    return await resp.text()
+  }
+  if (
+    (custom.source_type === 'js_function' || custom.source_type === 'desktop') &&
+    custom.source_code
+  ) {
+    const { createContext, runInContext } = await import('vm')
+    const { createRequire } = await import('module')
+    const vmRequire = createRequire(import.meta.url)
+    const sandboxedRequire = (mod) => {
+      if (!SAFE_MODULES.has(mod)) {
+        throw new Error(`Module "${mod}" is not allowed in custom tool sandbox`)
+      }
+      return vmRequire(mod)
+    }
+    const sandbox = {
+      args: toolArgs || {},
+      require: sandboxedRequire,
+      console: { log: () => {}, warn: () => {}, error: () => {} },
+      Promise,
+      JSON,
+      Math,
+      Date,
+      __resolve: undefined,
+      __reject: undefined
+    }
+    createContext(sandbox)
+    const wrapped = `new Promise((resolve, reject) => { __resolve = resolve; __reject = reject; (async function(args) { ${custom.source_code} })(args).then(__resolve).catch(__reject) })`
+    const resultPromise = runInContext(wrapped, sandbox, { timeout: 10_000 })
+    const result = await resultPromise
+    return typeof result === 'string' ? result : JSON.stringify(result ?? null)
+  }
+  throw new Error(`Custom tool "${custom.name}" has no executable source`)
 }

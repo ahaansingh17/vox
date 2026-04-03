@@ -7,6 +7,36 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.0.3] - 2026-06-14
+
+### Added
+
+- `find_tools` / `run_tool` meta-tools — model discovers and executes tools on demand instead of receiving all tools in every request context
+- MCP tool routing through `find_tools` / `run_tool`, reducing per-request tool context from ~80 to ~40 definitions
+- Text tool-call parser fallback (`llm.text-tool-parser.js`) for models that embed tool calls in prose instead of structured output
+- Agent fake-completion guard — prevents `done=true` without any real tool calls having been executed
+- Agent repetition safety break — forcibly stops the loop after 2 consecutive same-action warnings
+- Barge-in immediate interrupt — hearing detection instantly aborts LLM generation and cancels TTS playback
+- 43-test tool execution audit covering all 47 tools across 12 categories
+- Comprehensive test suite: 326 tests across 11 test files
+
+### Fixed
+
+- Agent infinite loop when journal rollback and done flag occurred in the same tool call (rollback early-return prevented done from being set)
+- AppleScript newline handling in email compose, reply, forward, and draft (`\n` → `" & return & "`)
+- Email send defaults for `cc`, `bcc`, and `attachments` parameters
+- Model download crash — `reader.pipeTo()` replaced with `resp.body.pipeTo()` (`ReadableStreamDefaultReader` lacks `pipeTo`)
+- Mail date parsing — removed incorrect Core Data epoch offset (Apple Mail `date_received` is already a Unix timestamp)
+- Bridge streaming — cross-chunk `<think>` tag handling for blocks split across SSE chunks
+
+### Changed
+
+- Tool delivery model replaced: removed `filterToolsForMessage` category-based system in favor of `find_tools` / `run_tool` discovery pattern
+- Bridge streaming loop rewritten for robust think-tag extraction and text tool-call fallback
+- MCP tools integrated into `find_tools` search results alongside built-in custom tools
+
+---
+
 ## [1.0.2] - 2026-04-01
 
 ### Added

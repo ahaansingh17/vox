@@ -118,17 +118,21 @@ export default function SetupScreen({ setupPhase, noModel }) {
   const [sttStatus, setSttStatus] = useState('pending')
   const [sttProgress, setSttProgress] = useState(0)
   const [sttHasProgress, setSttHasProgress] = useState(false)
+  const [engineStatus, setEngineStatus] = useState('pending')
+  const [enginePercent, setEnginePercent] = useState(null)
   const [llmPhase, setLlmPhase] = useState('pending')
   const [llmPercent, setLlmPercent] = useState(0)
   const [llmDownloaded, setLlmDownloaded] = useState(0)
   const [llmTotal, setLlmTotal] = useState(0)
   const [errorMsg, setErrorMsg] = useState('')
   const [slow, setSlow] = useState(false)
+  const [loadPercent, setLoadPercent] = useState(0)
   const targetRef = useRef(null)
   const slowTimerRef = useRef(null)
   const llmStartedRef = useRef(false)
 
   const sttDone = sttStatus === 'done' || setupPhase === 'loading-llm' || setupPhase === 'done'
+  const engineDone = engineStatus === 'ready' || engineStatus === 'skipped'
 
   const startLlmDownload = async () => {
     setLlmPhase('downloading')
@@ -164,7 +168,7 @@ export default function SetupScreen({ setupPhase, noModel }) {
     const unsubSttProgress = window.api?.models?.onSttProgress?.((data) => {
       if (data.total) {
         setSttHasProgress(true)
-        setSttProgress(Math.round((data.loaded / data.total) * 100))
+        setSttProgress((prev) => Math.max(prev, Math.round((data.loaded / data.total) * 100)))
       }
     })
 
@@ -183,14 +187,38 @@ export default function SetupScreen({ setupPhase, noModel }) {
         clearTimeout(slowTimerRef.current)
         setSlow(false)
         setLlmPhase('loading')
+        setLoadPercent(0)
         window.api.models.reload().catch(() => {})
       }
+    })
+
+    const unsubLoadProgress = window.api.models.onLoadProgress?.((data) => {
+      if (data.percent != null) setLoadPercent(data.percent)
+    })
+
+    const unsubEngineStatus = window.api?.models?.onEngineStatus?.((data) => {
+      if (data.status === 'downloading') {
+        setEngineStatus('downloading')
+      } else if (data.status === 'ready') {
+        setEngineStatus('ready')
+        setEnginePercent(100)
+      } else if (data.status === 'error') {
+        setEngineStatus('error')
+        setErrorMsg(data.error || 'Failed to install inference engine.')
+      }
+    })
+
+    const unsubEngineProgress = window.api?.models?.onEngineProgress?.((data) => {
+      if (data.percent != null) setEnginePercent(data.percent)
     })
 
     return () => {
       unsubSttStatus?.()
       unsubSttProgress?.()
       unsubLlmProgress?.()
+      unsubLoadProgress?.()
+      unsubEngineStatus?.()
+      unsubEngineProgress?.()
       clearTimeout(slowTimerRef.current)
     }
   }, [])
@@ -202,15 +230,38 @@ export default function SetupScreen({ setupPhase, noModel }) {
     return () => clearTimeout(t)
   }, [noModel])
 
-  const isError = llmPhase === 'error'
+  useEffect(() => {
+    if (sttDone && setupPhase === 'loading-llm' && engineStatus === 'pending') {
+      const timer = setTimeout(() => {
+        if (engineStatus === 'pending') setEngineStatus('skipped')
+      }, 2000)
+      return () => clearTimeout(timer)
+    }
+  }, [sttDone, setupPhase, engineStatus])
+
+  const isError = llmPhase === 'error' || engineStatus === 'error'
 
   const sttStepStatus = sttDone ? 'done' : 'active'
   const sttStepPercent = sttHasProgress ? sttProgress : null
 
-  const llmStepStatus = (() => {
+  const engineStepStatus = (() => {
     if (!sttDone) return 'pending'
+    if (engineDone) return 'done'
+    if (engineStatus === 'downloading') return 'active'
+    if (setupPhase === 'loading-llm') return 'active'
+    return 'pending'
+  })()
+
+  const engineStepPercent = engineStatus === 'downloading' ? enginePercent : null
+
+  const llmStepStatus = (() => {
+    if (!sttDone || (!engineDone && engineStatus !== 'pending')) return 'pending'
     if (llmPhase === 'downloading' || llmPhase === 'loading') return 'active'
-    if (llmPhase === 'pending' && (setupPhase === 'loading-llm' || setupPhase === 'done'))
+    if (
+      llmPhase === 'pending' &&
+      (setupPhase === 'loading-llm' || setupPhase === 'done') &&
+      engineDone
+    )
       return 'active'
     if (llmPhase === 'pending') return 'pending'
     return 'pending'
@@ -218,15 +269,24 @@ export default function SetupScreen({ setupPhase, noModel }) {
 
   const llmStepPercent = (() => {
     if (llmPhase === 'downloading') return llmPercent
-    if (llmPhase === 'loading') return null
+    if (llmPhase === 'loading') return loadPercent
+    if (llmStepStatus === 'active' && loadPercent > 0) return loadPercent
+    if (llmStepStatus === 'active' && noModel) return 0
     if (llmStepStatus === 'active') return null
     return null
   })()
 
   const llmDetail = (() => {
-    if (llmPhase === 'downloading' && llmTotal > 0)
+    if (llmPhase === 'downloading' && llmDownloaded > 0 && llmTotal > 0)
       return `${formatBytes(llmDownloaded)} / ${formatBytes(llmTotal)}`
-    if (llmPhase === 'loading') return 'Initializing model\u2026'
+    if (llmPhase === 'downloading' && llmDownloaded > 0)
+      return `${formatBytes(llmDownloaded)} downloaded`
+    if (llmPhase === 'downloading') return 'Starting download\u2026'
+    if (llmPhase === 'loading') return `Initializing model\u2026 ${loadPercent}%`
+    if (llmStepStatus === 'active' && llmPhase === 'pending' && loadPercent > 0)
+      return `Loading model\u2026 ${loadPercent}%`
+    if (llmStepStatus === 'active' && llmPhase === 'pending' && noModel)
+      return 'Preparing download\u2026'
     if (llmStepStatus === 'active' && llmPhase === 'pending') return 'Loading\u2026'
     return null
   })()
@@ -267,6 +327,12 @@ export default function SetupScreen({ setupPhase, noModel }) {
             />
             <StepIndicator
               number={2}
+              label="Inference engine"
+              status={engineStepStatus}
+              percent={engineStepPercent}
+            />
+            <StepIndicator
+              number={3}
               label="AI model"
               status={llmStepStatus}
               percent={llmStepPercent}

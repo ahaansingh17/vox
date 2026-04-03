@@ -19,10 +19,11 @@ import { registerMcpIpc } from './mcp/mcp.ipc'
 import { registerImessageIpc } from './imessage/imessage.ipc'
 import { registerVoiceIpc } from './voice/voice.ipc'
 import { registerPowerIpc, setKeepAwake } from './power/power.ipc'
-import { loadModel, destroyWorker, prewarmChat } from './ai/llm.bridge'
-import { getActiveModelPath } from './ai/models'
+import { loadModel, destroyWorker, prewarmChat, setPrewarmProviders } from './ai/llm.bridge'
+import { ensureBinary } from './ai/llm.server'
+import { getActiveModelPath, cleanupPartialDownloads } from './ai/models'
 import { connectAllMcpServers, closeAllMcp, setToolInvalidationCallback } from './mcp/mcp.service'
-import { invalidateToolDefinitions, getToolDefinitions } from './chat/chat.session'
+import { invalidateToolDefinitions, getToolDefinitions, getSystemPrompt } from './chat/chat.session'
 import { setToolDefinitionProvider } from './chat/task.queue'
 import { startWatching, stopWatching } from './imessage/imessage.service'
 import { initVoiceService, destroyVoiceService } from './voice/voice.service'
@@ -116,6 +117,9 @@ async function bootBackgroundServices() {
   } catch (err) {
     logger.warn('[main] MCP connect error:', err)
   }
+
+  setPrewarmProviders(getToolDefinitions, getSystemPrompt)
+  void prewarmChat()
 }
 
 async function initLlm() {
@@ -129,7 +133,6 @@ async function initLlm() {
 
   try {
     await loadModel(modelPath)
-    void prewarmChat()
   } catch (err) {
     logger.error('[main] Model load failed:', err)
     emitAll('models:load-error', { message: err.message })
@@ -198,6 +201,12 @@ app
     await waitSttReady().catch((err) => logger.warn('[main] STT preload failed:', err))
 
     emitSetupPhase('loading-llm')
+    cleanupPartialDownloads()
+    try {
+      await ensureBinary()
+    } catch (err) {
+      logger.error('[main] Engine install failed:', err)
+    }
     try {
       await initLlm()
     } catch (err) {
@@ -222,9 +231,10 @@ app
   .catch((err) => {
     logger.error('[main] App startup failed:', err)
     try {
-      createMainWindow()
-    } catch {
-      logger.error('[main] Failed to create fallback window')
+      if (!mainWindow) createMainWindow()
+      emitAll('setup:phase', { phase: 'error', message: err.message })
+    } catch (windowErr) {
+      logger.error('[main] Failed to create fallback window:', windowErr)
     }
   })
 
@@ -255,7 +265,10 @@ app.on('before-quit', (e) => {
   })
 })
 
+let _cleanedUp = false
 function forceCleanup() {
+  if (_cleanedUp) return
+  _cleanedUp = true
   destroyVoiceOrchestrator()
   destroyStt()
   destroyWorker()

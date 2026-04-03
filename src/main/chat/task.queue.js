@@ -388,6 +388,7 @@ function emitChatTaskEvent(eventType, taskId) {
 const _taskWaiters = new Map()
 
 export function waitForTaskCompletion(taskId, timeoutMs = 300000) {
+  hydrateTaskState()
   const meta = taskMeta.get(taskId)
   if (meta && ['completed', 'failed', 'aborted', 'incomplete'].includes(meta.status)) {
     return Promise.resolve({ taskId, status: meta.status, result: meta.result || null })

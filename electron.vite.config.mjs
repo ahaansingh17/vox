@@ -5,12 +5,7 @@ import react from '@vitejs/plugin-react'
 
 const require = createRequire(import.meta.url)
 
-const EXTRA_EXTERNALS = [
-  'better-sqlite3',
-  'node-llama-cpp',
-  'onnxruntime-node',
-  '@huggingface/transformers'
-]
+const EXTRA_EXTERNALS = ['better-sqlite3', 'onnxruntime-node', '@huggingface/transformers']
 
 export default defineConfig({
   main: {
@@ -19,7 +14,6 @@ export default defineConfig({
         external: EXTRA_EXTERNALS,
         input: {
           index: resolve('src/main/index.js'),
-          'llm.worker': resolve('src/main/ai/llm.worker.js'),
           'stt.worker': resolve('src/main/voice/stt.worker.js'),
           'voice.worker': require.resolve('@vox-ai-app/voice/worker'),
           'indexing.parser.worker': require.resolve('@vox-ai-app/indexing/parser/worker'),

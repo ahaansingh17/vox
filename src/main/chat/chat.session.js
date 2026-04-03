@@ -1,141 +1,34 @@
 import { randomUUID } from 'crypto'
-import { loadBuiltinTools } from '@vox-ai-app/tools'
-import { ALL_INTEGRATION_TOOLS } from '@vox-ai-app/integrations'
-import { ALL_KNOWLEDGE_TOOLS } from '@vox-ai-app/indexing'
 import {
   sendChatMessage,
   abortChat,
   clearChat,
   waitForChatResult,
-  getLlmStatus,
-  summarizeText
+  getLlmStatus
 } from '../ai/llm.bridge'
-import { CONTEXT_CHAR_THRESHOLD, CONTEXT_KEEP_RECENT_CHARS } from '../ai/config'
 import {
   getMessages,
   getMessagesBeforeId,
   appendMessage,
   clearMessages,
-  saveSummaryCheckpoint,
-  loadSummaryCheckpoint,
   clearSummaryCheckpoint
 } from '../storage/messages.db'
 import { storeGet } from '../storage/store'
 import { emitAll } from '../ipc/shared'
-import { definition as spawnDef } from './spawn.tool'
-import { getMcpToolDefinitions } from '../mcp/mcp.service'
 import { getUnreportedTerminalTasks, markTaskReported } from '../storage/tasks.db'
 import { logger } from '../logger'
 import { buildDefaultSystemPrompt } from './chat.prompts'
+import { getToolDefinitions, invalidateToolDefinitions } from './chat.tools'
+import {
+  sanitizeHistory,
+  buildContextHistory,
+  maybeSummarize,
+  resetSummaryState
+} from './chat.history'
 
-const SAVE_USER_INFO_DEF = {
-  name: 'save_user_info',
-  description:
-    'Persist a piece of information about the user for future reference. Use this when the user tells you something about themselves that would be useful to remember (name, location, job, preferences, etc.).',
-  parameters: {
-    type: 'object',
-    properties: {
-      info_key: {
-        type: 'string',
-        description:
-          'Short identifier for what this information is (e.g. "name", "location", "preferred_language", "occupation")'
-      },
-      info_value: {
-        type: 'string',
-        description: 'The value to store'
-      }
-    },
-    required: ['info_key', 'info_value']
-  }
-}
+export { getToolDefinitions, invalidateToolDefinitions }
 
 const MESSAGE_PAGE_SIZE = 50
-
-let _toolDefinitions = null
-
-function buildToolDefinitions() {
-  const defs = []
-
-  try {
-    const builtinMap = loadBuiltinTools()
-    for (const t of builtinMap.values()) defs.push(t.definition)
-  } catch (err) {
-    logger.warn('[chat] Failed to load builtin tools:', err.message)
-  }
-
-  try {
-    for (const t of ALL_INTEGRATION_TOOLS) defs.push(t.definition)
-  } catch (err) {
-    logger.warn('[chat] Failed to load integration tools:', err.message)
-  }
-
-  try {
-    for (const t of ALL_KNOWLEDGE_TOOLS) defs.push(t.definition)
-  } catch (err) {
-    logger.warn('[chat] Failed to load knowledge tools:', err.message)
-  }
-
-  try {
-    defs.push(...getMcpToolDefinitions())
-  } catch (err) {
-    logger.warn('[chat] Failed to load MCP tools:', err.message)
-  }
-
-  try {
-    const customTools = storeGet('customTools') || []
-    for (const t of customTools) {
-      if (t.is_enabled !== false && t.name) {
-        defs.push({
-          name: t.name,
-          description: t.description || '',
-          parameters: t.parameters || { type: 'object', properties: {} }
-        })
-      }
-    }
-  } catch (err) {
-    logger.warn('[chat] Failed to load custom tools:', err.message)
-  }
-
-  defs.push(spawnDef)
-  defs.push(SAVE_USER_INFO_DEF)
-  defs.push({
-    name: 'get_task',
-    description: 'Get the full details and result of a specific background task by its ID.',
-    parameters: {
-      type: 'object',
-      properties: {
-        taskId: { type: 'string', description: 'The task ID to look up' }
-      },
-      required: ['taskId']
-    }
-  })
-  defs.push({
-    name: 'search_tasks',
-    description:
-      'Search past background tasks by keyword query or filter by status. Use query for semantic/keyword search, status to filter.',
-    parameters: {
-      type: 'object',
-      properties: {
-        query: { type: 'string', description: 'Keyword search over task instructions and results' },
-        status: {
-          type: 'string',
-          enum: ['completed', 'failed', 'aborted', 'running', 'queued', 'incomplete'],
-          description: 'Filter by task status'
-        }
-      }
-    }
-  })
-  _toolDefinitions = defs
-  return defs
-}
-
-export function getToolDefinitions() {
-  return _toolDefinitions || buildToolDefinitions()
-}
-
-export function invalidateToolDefinitions() {
-  _toolDefinitions = null
-}
 
 function formatMessagesForRenderer(rows) {
   return rows.map((m, i) => ({
@@ -194,120 +87,6 @@ function dispatchMessage({ content, requestId, systemPrompt, history, toolDefini
   })
 }
 
-function sanitizeHistory(messages) {
-  if (!messages.length) return messages
-  const result = [...messages]
-
-  while (result.length > 0) {
-    const last = result[result.length - 1]
-    if (last.role === 'assistant' && last.content && last.content.length < 10) {
-      result.pop()
-      continue
-    }
-    break
-  }
-
-  const cleaned = []
-  for (let i = 0; i < result.length; i++) {
-    const msg = result[i]
-    if (msg.role === 'tool' || msg.role === 'tool_result') {
-      const prev = cleaned[cleaned.length - 1]
-      if (!prev || prev.role !== 'assistant') continue
-    }
-    if (msg.role === 'assistant' && msg.content?.includes('"tool_call"')) {
-      const next = result[i + 1]
-      if (!next || (next.role !== 'tool' && next.role !== 'tool_result')) continue
-    }
-    cleaned.push(msg)
-  }
-
-  return cleaned
-}
-
-let _summarizing = false
-let _conversationSummary = null
-let _summaryCoversUpToId = null
-let _summaryLoaded = false
-
-function ensureSummaryLoaded() {
-  if (_summaryLoaded) return
-  _summaryLoaded = true
-  try {
-    const checkpoint = loadSummaryCheckpoint()
-    if (checkpoint) {
-      _conversationSummary = checkpoint.summary
-      _summaryCoversUpToId = checkpoint.checkpointId
-    }
-  } catch (err) {
-    logger.warn('[chat] Failed to load summary checkpoint:', err.message)
-  }
-}
-
-function keepRecentByChars(messages) {
-  let charCount = 0
-  for (let i = messages.length - 1; i >= 0; i--) {
-    charCount += messages[i].content?.length || 0
-    if (charCount > CONTEXT_KEEP_RECENT_CHARS) {
-      return messages.slice(i + 1)
-    }
-  }
-  return messages
-}
-
-async function maybeSummarize() {
-  if (_summarizing) return
-  ensureSummaryLoaded()
-
-  const allMessages = getMessages()
-  const totalChars = allMessages.reduce((sum, m) => sum + (m.content?.length || 0), 0)
-  if (totalChars < CONTEXT_CHAR_THRESHOLD) return
-
-  const recentMessages = keepRecentByChars(allMessages)
-  const recentIds = new Set(recentMessages.map((m) => m.id))
-  const olderMessages = allMessages.filter((m) => !recentIds.has(m.id))
-  if (olderMessages.length === 0) return
-
-  _summarizing = true
-  try {
-    const prevSummary = _conversationSummary ? `Previous summary: ${_conversationSummary}\n\n` : ''
-    const newContent = olderMessages
-      .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
-      .join('\n')
-
-    const summary = await summarizeText(
-      prevSummary + newContent,
-      'Summarize this conversation concisely. Preserve key decisions, facts shared by the user, and task outcomes:'
-    )
-
-    _conversationSummary = summary
-    _summaryCoversUpToId = olderMessages[olderMessages.length - 1]?.id || null
-
-    try {
-      saveSummaryCheckpoint(_conversationSummary, _summaryCoversUpToId)
-    } catch (err) {
-      logger.warn('[chat] Failed to persist summary:', err.message)
-    }
-  } catch (err) {
-    logger.warn('[chat] Summarization failed:', err.message)
-  } finally {
-    _summarizing = false
-  }
-}
-
-function buildContextHistory(allMessages) {
-  ensureSummaryLoaded()
-
-  if (!_conversationSummary || !_summaryCoversUpToId) {
-    return allMessages.map((m) => ({ role: m.role, content: m.content }))
-  }
-  const summaryIdx = allMessages.findIndex((m) => m.id === _summaryCoversUpToId)
-  const recent = summaryIdx >= 0 ? allMessages.slice(summaryIdx + 1) : allMessages
-  return [
-    { role: 'assistant', content: `[Summary of earlier conversation]\n${_conversationSummary}` },
-    ...recent.map((m) => ({ role: m.role, content: m.content }))
-  ]
-}
-
 function injectUnreportedTasks() {
   const unreported = getUnreportedTerminalTasks()
   for (const task of unreported) {
@@ -321,17 +100,28 @@ function injectUnreportedTasks() {
 }
 
 async function prepareMessage(content) {
+  const _perfId = `[PERF] prepareMessage #${Date.now()}`
+  console.time(_perfId)
   if (!content?.trim())
     throw Object.assign(new Error('Message content required'), { code: 'VALIDATION_ERROR' })
 
   const requestId = randomUUID()
+
+  console.time(`${_perfId} getSystemPrompt`)
   const systemPrompt = getSystemPrompt()
+  console.timeEnd(`${_perfId} getSystemPrompt`)
 
   injectUnreportedTasks()
 
+  console.time(`${_perfId} buildHistory`)
   const storedHistory = buildContextHistory(sanitizeHistory(getMessages()))
-  const toolDefinitions = getToolDefinitions()
+  console.timeEnd(`${_perfId} buildHistory`)
 
+  console.time(`${_perfId} getToolDefinitions`)
+  const toolDefinitions = getToolDefinitions()
+  console.timeEnd(`${_perfId} getToolDefinitions`)
+
+  console.timeEnd(_perfId)
   return {
     requestId,
     systemPrompt,
@@ -341,8 +131,14 @@ async function prepareMessage(content) {
 }
 
 export async function sendMessage({ content }) {
-  const { requestId, systemPrompt, storedHistory, toolDefinitions } = await prepareMessage(content)
+  const _perfId = `[PERF] sendMessage #${Date.now()}`
+  console.time(_perfId)
 
+  console.time(`${_perfId} prepareMessage`)
+  const { requestId, systemPrompt, storedHistory, toolDefinitions } = await prepareMessage(content)
+  console.timeEnd(`${_perfId} prepareMessage`)
+
+  console.time(`${_perfId} dispatchMessage`)
   dispatchMessage({
     content,
     requestId,
@@ -350,33 +146,45 @@ export async function sendMessage({ content }) {
     history: storedHistory,
     toolDefinitions
   })
+  console.timeEnd(`${_perfId} dispatchMessage`)
 
-  waitForChatResult(requestId)
-    .then(({ finalText, streamId }) => {
-      if (finalText) {
-        const row = appendMessage('assistant', finalText)
-        void maybeSummarize()
-        emitAll('chat:event', {
-          type: 'msg:complete',
-          data: {
-            streamId,
+  try {
+    console.time(`${_perfId} waitForChatResult`)
+    const { finalText, streamId } = await waitForChatResult(requestId)
+    console.timeEnd(`${_perfId} waitForChatResult`)
+    if (finalText) {
+      const row = appendMessage('assistant', finalText)
+      void maybeSummarize()
+      emitAll('chat:event', {
+        type: 'msg:complete',
+        data: {
+          streamId: streamId || requestId,
+          dbId: row?.id || null,
+          recovery: {
+            id: `db-${row?.id}`,
             dbId: row?.id || null,
-            recovery: {
-              id: `db-${row?.id}`,
-              dbId: row?.id || null,
-              role: 'assistant',
-              content: finalText,
-              pending: false,
-              streamId: null
-            }
+            role: 'assistant',
+            content: finalText,
+            pending: false,
+            streamId: null
           }
-        })
-      }
+        }
+      })
+    } else {
+      emitAll('chat:event', {
+        type: 'msg:complete',
+        data: { streamId: streamId || requestId }
+      })
+    }
+  } catch (err) {
+    logger.warn('[chat] Message result failed:', err.message)
+    emitAll('chat:event', {
+      type: 'msg:complete',
+      data: { streamId: requestId }
     })
-    .catch((err) => {
-      logger.warn('[chat] Message result failed:', err.message)
-    })
+  }
 
+  console.timeEnd(_perfId)
   return { requestId }
 }
 
@@ -401,9 +209,7 @@ export function abort() {
 }
 
 export async function clearConversation() {
-  _conversationSummary = null
-  _summaryCoversUpToId = null
-  _summaryLoaded = true
+  resetSummaryState()
   try {
     clearSummaryCheckpoint()
   } catch {
@@ -414,8 +220,17 @@ export async function clearConversation() {
   emitAll('chat:event', { type: 'msg:replace-all', data: { messages: [], hasMore: false } })
 }
 
+const WELCOME_MESSAGE =
+  "Hey! I'm Vox, your personal AI assistant running right here on your machine. I can search your files, draft emails, create documents, run code, and more. Just ask."
+
 export function getStoredMessagesPage(limit = MESSAGE_PAGE_SIZE) {
-  return buildPage(getMessages(undefined, limit + 1), limit)
+  const rows = getMessages(undefined, limit + 1)
+  if (rows.length === 0) {
+    appendMessage('assistant', WELCOME_MESSAGE)
+    const seeded = getMessages(undefined, limit + 1)
+    return buildPage(seeded, limit)
+  }
+  return buildPage(rows, limit)
 }
 
 export function loadOlderStoredMessages(offsetId, limit = MESSAGE_PAGE_SIZE) {
@@ -440,7 +255,7 @@ export function getChatStatus() {
   const llm = getLlmStatus()
   return {
     status: {
-      state: llm.ready ? 'ready' : llm.loading ? 'loading' : 'error',
+      state: llm.ready ? 'ready' : llm.loading || !llm.error ? 'loading' : 'error',
       connected: true,
       sessionReady: llm.ready,
       mode: _currentMode,

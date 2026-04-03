@@ -1,3 +1,5 @@
+import { randomUUID } from 'crypto'
+
 export const DEFAULT_CONVERSATION_ID = 'main'
 
 function getConversationId(conversationId) {
@@ -11,8 +13,8 @@ function normalizeLimit(limit) {
 }
 
 function normalizeBeforeId(beforeId) {
-  const parsed = Number.parseInt(beforeId, 10)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+  if (!beforeId) return null
+  return String(beforeId).trim() || null
 }
 
 function mapRow(row) {
@@ -73,32 +75,26 @@ export function touchConversation(db, conversationId = DEFAULT_CONVERSATION_ID) 
 }
 
 export function appendMessage(db, role, content, conversationId = DEFAULT_CONVERSATION_ID) {
-  const id = getConversationId(conversationId)
+  const convId = getConversationId(conversationId)
+  const msgId = randomUUID()
   const now = new Date().toISOString()
   const normalizedRole = String(role || '').trim() || 'user'
   const normalizedContent = String(content ?? '')
 
-  touchConversation(db, id)
+  touchConversation(db, convId)
 
-  const result = db
-    .prepare(
-      `
-    INSERT INTO messages (conversation_id, role, content, created_at)
-    VALUES (?, ?, ?, ?)
-  `
-    )
-    .run(id, normalizedRole, normalizedContent, now)
+  db.prepare(
+    `INSERT INTO messages (id, conversation_id, role, content, created_at)
+     VALUES (?, ?, ?, ?, ?)`
+  ).run(msgId, convId, normalizedRole, normalizedContent, now)
 
   return mapRow(
     db
       .prepare(
-        `
-    SELECT id, conversation_id, role, content, created_at
-    FROM messages
-    WHERE id = ?
-  `
+        `SELECT id, conversation_id, role, content, created_at
+       FROM messages WHERE id = ?`
       )
-      .get(result.lastInsertRowid)
+      .get(msgId)
   )
 }
 
@@ -109,12 +105,10 @@ export function getMessages(db, conversationId = DEFAULT_CONVERSATION_ID, limit)
   if (!normalizedLimit) {
     return db
       .prepare(
-        `
-      SELECT id, conversation_id, role, content, created_at
-      FROM messages
-      WHERE conversation_id = ?
-      ORDER BY id ASC
-    `
+        `SELECT id, conversation_id, role, content, created_at
+         FROM messages
+         WHERE conversation_id = ?
+         ORDER BY created_at ASC, id ASC`
       )
       .all(id)
       .map(mapRow)
@@ -122,17 +116,15 @@ export function getMessages(db, conversationId = DEFAULT_CONVERSATION_ID, limit)
 
   return db
     .prepare(
-      `
-    SELECT id, conversation_id, role, content, created_at
-    FROM (
-      SELECT id, conversation_id, role, content, created_at
-      FROM messages
-      WHERE conversation_id = ?
-      ORDER BY id DESC
-      LIMIT ?
-    )
-    ORDER BY id ASC
-  `
+      `SELECT id, conversation_id, role, content, created_at
+       FROM (
+         SELECT id, conversation_id, role, content, created_at
+         FROM messages
+         WHERE conversation_id = ?
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?
+       )
+       ORDER BY created_at ASC, id ASC`
     )
     .all(id, normalizedLimit)
     .map(mapRow)
@@ -144,7 +136,7 @@ export function getMessagesBeforeId(
   conversationId = DEFAULT_CONVERSATION_ID,
   limit = 50
 ) {
-  const id = getConversationId(conversationId)
+  const convId = getConversationId(conversationId)
   const normalizedBeforeId = normalizeBeforeId(beforeId)
   const normalizedLimit = normalizeLimit(limit) || 50
 
@@ -152,21 +144,26 @@ export function getMessagesBeforeId(
     return []
   }
 
+  const anchor = db
+    .prepare(`SELECT created_at, id FROM messages WHERE id = ? AND conversation_id = ?`)
+    .get(normalizedBeforeId, convId)
+
+  if (!anchor) return []
+
   return db
     .prepare(
-      `
-    SELECT id, conversation_id, role, content, created_at
-    FROM (
-      SELECT id, conversation_id, role, content, created_at
-      FROM messages
-      WHERE conversation_id = ? AND id < ?
-      ORDER BY id DESC
-      LIMIT ?
+      `SELECT id, conversation_id, role, content, created_at
+       FROM (
+         SELECT id, conversation_id, role, content, created_at
+         FROM messages
+         WHERE conversation_id = ?
+           AND (created_at < ? OR (created_at = ? AND id < ?))
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?
+       )
+       ORDER BY created_at ASC, id ASC`
     )
-    ORDER BY id ASC
-  `
-    )
-    .all(id, normalizedBeforeId, normalizedLimit)
+    .all(convId, anchor.created_at, anchor.created_at, anchor.id, normalizedLimit)
     .map(mapRow)
 }
 

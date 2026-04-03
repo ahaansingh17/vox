@@ -6,8 +6,9 @@ Vox is a local-first AI assistant built on Electron. The core packages (MCP, too
 
 - Node.js 20+
 - npm 10+
-- Ollama or LMStudio running locally
 - macOS to run the app itself (for now — see [Platform support](#platform-support) below)
+
+The app downloads llama-server (llama.cpp) and a default model automatically on first launch. No external LLM setup required.
 
 ## Monorepo setup
 
