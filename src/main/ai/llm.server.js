@@ -7,6 +7,7 @@ import {
   writeFileSync,
   readFileSync,
   createWriteStream,
+  readdirSync,
   renameSync,
   rmSync
 } from 'fs'
@@ -18,6 +19,7 @@ const DEFAULT_PORT = 19741
 const HEALTH_POLL_MS = 300
 const MAX_HEALTH_POLLS = 400
 const LLAMA_SERVER_VERSION = 'b8635'
+const INSTALL_REVISION = 2
 
 let _process = null
 let _port = DEFAULT_PORT
@@ -77,7 +79,11 @@ function findBinary() {
   if (existsSync(bundled)) return bundled
 
   const managed = getManagedBinaryPath()
-  if (existsSync(managed) && getInstalledVersion() === LLAMA_SERVER_VERSION) return managed
+  if (
+    existsSync(managed) &&
+    getInstalledVersion() === `${LLAMA_SERVER_VERSION}.${INSTALL_REVISION}`
+  )
+    return managed
 
   const brewArm = '/opt/homebrew/bin/llama-server'
   if (existsSync(brewArm)) return brewArm
@@ -147,15 +153,27 @@ export async function ensureBinary() {
     renameSync(found, binaryPath)
     chmodSync(binaryPath, 0o755)
 
+    const foundDir = found.substring(0, found.lastIndexOf('/'))
+    const libExts = ['.dylib', '.so', '.dll']
+    for (const f of readdirSync(foundDir)) {
+      if (libExts.some((ext) => f.includes(ext))) {
+        const src = join(foundDir, f)
+        const dst = join(binDir, f)
+        if (existsSync(dst)) rmSync(dst)
+        renameSync(src, dst)
+        chmodSync(dst, 0o755)
+      }
+    }
+
     if (process.platform === 'darwin') {
       try {
-        execSync(`xattr -dr com.apple.quarantine "${binaryPath}"`)
+        execSync(`xattr -dr com.apple.quarantine "${binDir}"/*`)
       } catch {
         /* ok */
       }
     }
 
-    writeFileSync(getVersionFilePath(), LLAMA_SERVER_VERSION)
+    writeFileSync(getVersionFilePath(), `${LLAMA_SERVER_VERSION}.${INSTALL_REVISION}`)
 
     logger.info('[llm.server] Installed llama-server', LLAMA_SERVER_VERSION, 'at', binaryPath)
     emitAll('engine:status', { status: 'ready', version: LLAMA_SERVER_VERSION })
