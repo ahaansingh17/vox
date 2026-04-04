@@ -12,6 +12,7 @@ async function init(cacheDir) {
   transcriber = await pipeline('automatic-speech-recognition', 'onnx-community/whisper-tiny.en', {
     dtype: 'fp32',
     device: 'cpu',
+    session_options: { intraOpNumThreads: 1, interOpNumThreads: 1 },
     progress_callback: (p) => {
       if (p.status === 'progress' && p.total) {
         parentPort.postMessage({ type: 'progress', file: p.file, loaded: p.loaded, total: p.total })

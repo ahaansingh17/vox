@@ -56,13 +56,14 @@ const resetBuffers = () => {
   )
   embedBuffer = []
 }
+const SESSION_OPTS = { intraOpNumThreads: 1, interOpNumThreads: 1 }
 const loadSessions = async () => {
   const { base } = workerData
   const { join } = require('path')
   sessions = {
-    mel: await ort.InferenceSession.create(join(base, 'melspectrogram.onnx')),
-    embed: await ort.InferenceSession.create(join(base, 'embedding_model.onnx')),
-    wakeWord: await ort.InferenceSession.create(join(base, 'computer.onnx'))
+    mel: await ort.InferenceSession.create(join(base, 'melspectrogram.onnx'), SESSION_OPTS),
+    embed: await ort.InferenceSession.create(join(base, 'embedding_model.onnx'), SESSION_OPTS),
+    wakeWord: await ort.InferenceSession.create(join(base, 'computer.onnx'), SESSION_OPTS)
   }
 }
 const releaseRecorder = () => {

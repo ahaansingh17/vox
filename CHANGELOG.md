@@ -7,6 +7,28 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.0.5] - 2026-04-04
+
+### Fixed
+
+- **ONNX Runtime native crash** — two worker_threads (wake word + STT) each spawned onnxruntime with default thread pool settings, creating 10+ native threads on Apple Silicon that raced on shared memory causing `EXC_BAD_ACCESS (SIGSEGV)`. Both workers now use `intraOpNumThreads: 1, interOpNumThreads: 1` — the models are tiny enough that single-threaded inference is faster anyway.
+- **llama-server companion libraries** — installer only extracted the binary; companion `.dylib`/`.so`/`.dll` files (e.g. `libmtmd.0.dylib`) were missing, causing SIGABRT on launch. Install now copies all shared libraries alongside the binary.
+- **sharp/semver module resolution** — `sharp` depends on `semver` v7 but the root had v6; added `sharp` to externals and `semver` to `asarUnpack`.
+- **pvrecorder-node missing** — peer dependency of `@vox-ai-app/voice` wasn't externalized; added to `EXTRA_EXTERNALS` and explicit dependency.
+- **destroyScheduler crash** — was sync but called with `.catch()`; made `async`.
+
+### Added
+
+- **Auto-updater** — `electron-updater` checks for updates 15s after launch, auto-downloads, and installs on quit. Preload exposes `updater.install()`, `onAvailable()`, `onDownloaded()`.
+- **llama-server install revision** — `INSTALL_REVISION` counter forces re-download when install logic changes, without bumping the llama.cpp version.
+
+### Changed
+
+- `electron-builder.yml` — expanded `asarUnpack` to include `onnxruntime-node`, `onnxruntime-common`, `semver`, `@picovoice/pvrecorder-node`, `sharp`, `@img`, `detect-libc`
+- `electron.vite.config.mjs` — `EXTRA_EXTERNALS` now includes `sharp` and `@picovoice/pvrecorder-node`
+
+---
+
 ## [1.0.4] - 2026-04-04
 
 ### Fixed
