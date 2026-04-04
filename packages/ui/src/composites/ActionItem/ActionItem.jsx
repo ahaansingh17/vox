@@ -59,7 +59,7 @@ function ExecuteCodeDetails({ argsObj, rawResult }) {
         <div className="activity-code-stream">
           <span className="activity-code-stream-label">stdout</span>
           <pre className="activity-code-stream-pre">
-            {stdout.length > 600 ? `${stdout.slice(0, 600)}\u2026` : stdout}
+            {stdout.length > 600 ? `${stdout.slice(0, 600)}…` : stdout}
           </pre>
         </div>
       )}
@@ -67,7 +67,7 @@ function ExecuteCodeDetails({ argsObj, rawResult }) {
         <div className="activity-code-stream activity-code-stream-err">
           <span className="activity-code-stream-label">stderr</span>
           <pre className="activity-code-stream-pre">
-            {stderr.length > 600 ? `${stderr.slice(0, 600)}\u2026` : stderr}
+            {stderr.length > 600 ? `${stderr.slice(0, 600)}…` : stderr}
           </pre>
         </div>
       )}
@@ -86,7 +86,7 @@ function GenericDetails({ argEntries, rawResult }) {
           <div key={k} className="activity-tool-arg-row">
             <span className="activity-tool-arg-key">{k}</span>
             <span className="activity-tool-arg-val">
-              {s.length > 400 ? `${s.slice(0, 400)}\u2026` : s}
+              {s.length > 400 ? `${s.slice(0, 400)}…` : s}
             </span>
           </div>
         )
@@ -94,7 +94,7 @@ function GenericDetails({ argEntries, rawResult }) {
       {resultStr && (
         <div className="activity-action-result">
           <span className="activity-tool-result-text">
-            {resultStr.length > 500 ? `${resultStr.slice(0, 500)}\u2026` : resultStr}
+            {resultStr.length > 500 ? `${resultStr.slice(0, 500)}…` : resultStr}
           </span>
         </div>
       )}
@@ -127,7 +127,7 @@ export const ActionItem = memo(function ActionItem({ call, result, isLast, repea
       ? (() => {
           const s =
             typeof primaryEntry[1] === 'string' ? primaryEntry[1] : JSON.stringify(primaryEntry[1])
-          return s.length > 90 ? `${s.slice(0, 90)}\u2026` : s
+          return s.length > 90 ? `${s.slice(0, 90)}…` : s
         })()
       : null)
 

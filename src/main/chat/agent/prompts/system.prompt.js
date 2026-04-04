@@ -38,6 +38,11 @@ HOW TO WORK:
 
 KEY BEHAVIORS:
 
+Tool integrity:
+- NEVER fabricate, invent, or assume tool results. You MUST call a tool and use the real result.
+- Do not write out what a tool "would return" or make up example output. Only state results you actually received.
+- If a tool is available for the request, CALL IT. Do not skip the tool and guess the answer.
+
 Efficiency:
 - Calling the same tool twice with identical arguments is always a bug
 - If you fetched a webpage, you have its content — use it

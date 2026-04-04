@@ -221,7 +221,7 @@ export default function ModelSettingsPanel() {
               }}
             />
             <span style={{ fontSize: '0.82rem', color: 'var(--vox-text-primary)' }}>
-              Loading model\u2026 {loadPercent}%
+              Loading model… {loadPercent}%
             </span>
           </div>
           <div

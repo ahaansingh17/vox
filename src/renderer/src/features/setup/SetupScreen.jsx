@@ -281,13 +281,13 @@ export default function SetupScreen({ setupPhase, noModel }) {
       return `${formatBytes(llmDownloaded)} / ${formatBytes(llmTotal)}`
     if (llmPhase === 'downloading' && llmDownloaded > 0)
       return `${formatBytes(llmDownloaded)} downloaded`
-    if (llmPhase === 'downloading') return 'Starting download\u2026'
-    if (llmPhase === 'loading') return `Initializing model\u2026 ${loadPercent}%`
+    if (llmPhase === 'downloading') return 'Starting download…'
+    if (llmPhase === 'loading') return `Initializing model… ${loadPercent}%`
     if (llmStepStatus === 'active' && llmPhase === 'pending' && loadPercent > 0)
-      return `Loading model\u2026 ${loadPercent}%`
+      return `Loading model… ${loadPercent}%`
     if (llmStepStatus === 'active' && llmPhase === 'pending' && noModel)
-      return 'Preparing download\u2026'
-    if (llmStepStatus === 'active' && llmPhase === 'pending') return 'Loading\u2026'
+      return 'Preparing download…'
+    if (llmStepStatus === 'active' && llmPhase === 'pending') return 'Loading…'
     return null
   })()
 
@@ -342,7 +342,7 @@ export default function SetupScreen({ setupPhase, noModel }) {
         )}
 
         {slow && llmPhase === 'downloading' && (
-          <p className="setup-slow">Taking longer than usual \u2014 check your connection.</p>
+          <p className="setup-slow">Taking longer than usual — check your connection.</p>
         )}
       </div>
     </section>

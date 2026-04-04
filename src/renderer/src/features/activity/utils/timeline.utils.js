@@ -21,7 +21,7 @@ export const getToolSub = (toolName, argsObj) => {
     const cmds = argsObj?.commands
     if (Array.isArray(cmds) && cmds.length > 0) {
       const first = String(cmds[0]).trim()
-      const preview = first.length > 80 ? `${first.slice(0, 80)}\u2026` : first
+      const preview = first.length > 80 ? `${first.slice(0, 80)}…` : first
       return cmds.length > 1 ? `${preview}  +${cmds.length - 1} more` : preview
     }
   }

@@ -143,6 +143,20 @@ async function handleChatSend({ requestId, message, systemPrompt, history, toolD
         if (textCalls.length > 0) {
           logger.info(`[llm.bridge] Parsed ${textCalls.length} tool call(s) from text output`)
           for (const tc of textCalls) toolCalls.push(tc)
+
+          const tagIdx = roundText.indexOf('<tool_call>')
+          const jsonIdx = roundText.search(/\{\s*"name"\s*:\s*"/)
+          const cutIdx = tagIdx !== -1 ? tagIdx : jsonIdx
+          const originalLen = roundText.length
+          if (cutIdx > 0) {
+            roundText = roundText.slice(0, cutIdx).trimEnd()
+          } else {
+            roundText = ''
+          }
+          const charsRemoved = originalLen - roundText.length
+          if (charsRemoved > 0) {
+            finalText = finalText.slice(0, finalText.length - charsRemoved)
+          }
         }
       }
 
