@@ -10,6 +10,9 @@ files:
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
 asarUnpack:
   - resources/**
+  - out/main/stt.worker.js
+  - out/main/voice.worker.js
+  - out/main/indexing.parser.worker.js
 win:
   executableName: Vox
 nsis:

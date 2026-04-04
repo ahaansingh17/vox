@@ -3,6 +3,9 @@ import ReactDOM from 'react-dom/client'
 import './assets/tokens.css'
 import VoiceWidget from './features/voice/components/VoiceWidget'
 import './styles/voice.css'
+import { initRendererSentry } from './telemetry/sentry'
+
+initRendererSentry('voice-renderer')
 
 let lastIgnoreValue = null
 

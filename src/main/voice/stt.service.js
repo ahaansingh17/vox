@@ -110,6 +110,10 @@ function spawnWorker() {
     logger.error('[stt] Worker crashed:', err)
     ready = false
     transcribing = false
+    emitAll('models:stt-status', { status: 'error', message: err?.message || 'Worker crashed' })
+    for (const reject of _readyRejectors) reject(err)
+    _readyResolvers = []
+    _readyRejectors = []
   })
 
   worker.on('exit', (code) => {

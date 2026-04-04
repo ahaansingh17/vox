@@ -6,6 +6,7 @@ import { promisify } from 'util'
 import { exec } from 'child_process'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 
+import { addMainBreadcrumb, captureMainException, initMainSentry } from './telemetry/sentry'
 import { logger } from './logger'
 import { emitAll } from './ipc/shared'
 import { getDb, closeDb } from './storage/db'
@@ -36,10 +37,24 @@ import {
 } from './overlay/overlay.window'
 import { registerOverlayIpc } from './overlay/overlay.ipc'
 import { initVoiceOrchestrator, destroyVoiceOrchestrator } from './voice/voice.orchestrator'
-import { bootIndexingRuntime, shutdownIndexingRuntime } from '@vox-ai-app/indexing'
+import {
+  bootIndexingRuntime,
+  shutdownIndexingRuntime,
+  setSentryCapture
+} from '@vox-ai-app/indexing'
 import { createTray, destroyTray } from './app/tray'
 
 const execAsync = promisify(exec)
+
+initMainSentry()
+setSentryCapture(captureMainException)
+
+logger.hooks.push((message) => {
+  if (message.level === 'error' || message.level === 'warn') {
+    addMainBreadcrumb(message.data, message.level)
+  }
+  return message
+})
 
 const SHUTDOWN_TIMEOUT_MS = 5000
 
