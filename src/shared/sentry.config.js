@@ -1,4 +1,5 @@
-export const sentryDsn = 'https://o487448.ingest.us.sentry.io/api/4511096423710720/integration/otlp'
+export const sentryDsn =
+  'https://b3683e43a9118d6f7405b4cb4c9f6f49@o487448.ingest.us.sentry.io/4511096423710720'
 
 const macPathPattern = /\/Users\/[^/\s"'`]+(?:\/[^/\s"'`]+)*/g
 const linuxPathPattern = /\/home\/[^/\s"'`]+(?:\/[^/\s"'`]+)*/g
