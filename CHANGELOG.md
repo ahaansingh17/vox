@@ -7,6 +7,24 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [2.0.0] - 2026-04-05
+
+### Fixed
+
+- **VAD session release crash** — `destroyVad()` threw unhandled rejection when ONNX runtime returned "invalid session id" during cleanup. Root cause: the JS-side session object held a stale WASM session ID that the runtime no longer recognized. `session.release()` is now wrapped in try-catch, and session reference is nulled before awaiting release to prevent double-release races.
+- **Unhandled promise rejection in STT teardown** — `destroyStt()` called async `destroyVad()` without await or catch, surfacing as `auto.node.onunhandledrejection` in Sentry. Now catches the rejection.
+- **Double destroyStt in shutdown** — `forceCleanup()` called `destroyStt()` both via `destroyVoiceOrchestrator()` and directly. Removed the duplicate call.
+- **Agent planning text leak** — character-by-character JSON leaked to UI during agent planning phase. Removed `text` from `recordActivity` filter in task queue and from `chat:event` broadcast in bridge.
+- **Channel messages bleeding into main chat** — WhatsApp/channel messages appeared in main chat UI because `silent` flag wasn't implemented in bridge. Added silent parameter throughout `handleChatSend`.
+- **toolChoice passthrough** — `client.js` now passes `toolChoice` parameter to llama-server instead of hardcoding `'auto'`. Agent planning uses `toolChoice: 'required'` to force tool calls.
+
+### Added
+
+- **Agent planning JSON recovery** — `tryParseJournalJson()` in agent runner recovers when model dumps journal JSON as text instead of a tool call, using brace-depth parsing and `JOURNAL_KEYS` validation.
+- **Planning text suppression** — `isPlanning` flag suppresses text emit during agent planning phase.
+
+---
+
 ## [1.0.7] - 2026-04-05
 
 ### Fixed

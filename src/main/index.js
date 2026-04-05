@@ -34,7 +34,7 @@ import {
 import { setToolDefinitionProvider } from './chat/task.queue'
 import { startWatching, stopWatching } from './imessage/imessage.service'
 import { initVoiceService, destroyVoiceService } from './voice/voice.service'
-import { initStt, destroyStt, waitSttReady } from './voice/stt.service'
+import { initStt, waitSttReady } from './voice/stt.service'
 import { initEmbeddings, destroyEmbeddings } from './ai/embeddings/embed'
 import { createVoiceWindow, destroyVoiceWindow } from './voice/voice.window'
 import {
@@ -367,7 +367,6 @@ function forceCleanup() {
   _cleanedUp = true
   destroyEmbeddings()
   destroyVoiceOrchestrator()
-  destroyStt()
   destroyWorker()
   closeDb()
   destroyVoiceWindow()

@@ -98,8 +98,13 @@ export function isVadReady() {
 
 export async function destroyVad() {
   if (session) {
-    await session.release()
+    const s = session
     session = null
+    try {
+      await s.release()
+    } catch {
+      // onnx session may already be freed
+    }
   }
   state = null
   speechFrameCount = 0

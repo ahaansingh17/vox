@@ -300,5 +300,5 @@ export function destroyStt() {
   ready = false
   transcribing = false
   resetBuffers()
-  destroyVad()
+  destroyVad().catch(() => {})
 }
