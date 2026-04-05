@@ -124,6 +124,9 @@ export default function SetupScreen({ setupPhase, noModel }) {
   const [llmPercent, setLlmPercent] = useState(0)
   const [llmDownloaded, setLlmDownloaded] = useState(0)
   const [llmTotal, setLlmTotal] = useState(0)
+  const [embedStatus, setEmbedStatus] = useState('pending')
+  const [embedProgress, setEmbedProgress] = useState(0)
+  const [embedHasProgress, setEmbedHasProgress] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
   const [slow, setSlow] = useState(false)
   const [loadPercent, setLoadPercent] = useState(0)
@@ -212,6 +215,23 @@ export default function SetupScreen({ setupPhase, noModel }) {
       if (data.percent != null) setEnginePercent(data.percent)
     })
 
+    const unsubEmbedStatus = window.api?.models?.onEmbedStatus?.((data) => {
+      if (data.status === 'ready') {
+        setEmbedStatus('done')
+      } else if (data.status === 'downloading') {
+        setEmbedStatus('downloading')
+      } else if (data.status === 'error') {
+        setEmbedStatus('done')
+      }
+    })
+
+    const unsubEmbedProgress = window.api?.models?.onEmbedProgress?.((data) => {
+      if (data.total) {
+        setEmbedHasProgress(true)
+        setEmbedProgress((prev) => Math.max(prev, Math.round((data.loaded / data.total) * 100)))
+      }
+    })
+
     return () => {
       unsubSttStatus?.()
       unsubSttProgress?.()
@@ -219,6 +239,8 @@ export default function SetupScreen({ setupPhase, noModel }) {
       unsubLoadProgress?.()
       unsubEngineStatus?.()
       unsubEngineProgress?.()
+      unsubEmbedStatus?.()
+      unsubEmbedProgress?.()
       clearTimeout(slowTimerRef.current)
     }
   }, [])
@@ -291,6 +313,15 @@ export default function SetupScreen({ setupPhase, noModel }) {
     return null
   })()
 
+  const embedStepStatus = (() => {
+    if (embedStatus === 'done') return 'done'
+    if (setupPhase === 'loading-embeddings' || embedStatus === 'downloading') return 'active'
+    if (setupPhase === 'done') return 'done'
+    return 'pending'
+  })()
+
+  const embedStepPercent = embedHasProgress ? embedProgress : null
+
   return (
     <section className="setup-screen">
       <div className="setup-card">
@@ -337,6 +368,12 @@ export default function SetupScreen({ setupPhase, noModel }) {
               status={llmStepStatus}
               percent={llmStepPercent}
               detail={llmDetail}
+            />
+            <StepIndicator
+              number={4}
+              label="Search model"
+              status={embedStepStatus}
+              percent={embedStepPercent}
             />
           </div>
         )}

@@ -1,7 +1,4 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import fs from 'node:fs'
-import path from 'node:path'
-import os from 'node:os'
 
 describe('scheduler/cron', () => {
   let scheduleJob, cancelJob, cancelAllJobs, getJob, listJobs, computeNextRun
@@ -91,82 +88,5 @@ describe('scheduler/cron', () => {
     const next = computeNextRun('0 12 * * *', 'America/New_York')
     expect(typeof next).toBe('number')
     expect(next).toBeGreaterThan(0)
-  })
-})
-
-describe('scheduler/store', () => {
-  let createStore
-  let tmpDir
-
-  beforeEach(async () => {
-    vi.resetModules()
-    ;({ createStore } = await import('../packages/scheduler/src/store.js'))
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sched-store-'))
-  })
-
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true })
-  })
-
-  it('should save and retrieve a schedule', () => {
-    const store = createStore(tmpDir)
-    store.save({ id: 's1', expr: '0 0 * * *', prompt: 'hello' })
-    const got = store.get('s1')
-    expect(got).not.toBeNull()
-    expect(got.id).toBe('s1')
-    expect(got.prompt).toBe('hello')
-    expect(got.createdAt).toBeDefined()
-  })
-
-  it('should list all schedules', () => {
-    const store = createStore(tmpDir)
-    store.save({ id: 's1', expr: '0 0 * * *', prompt: 'a' })
-    store.save({ id: 's2', expr: '*/5 * * * *', prompt: 'b' })
-    const all = store.list()
-    expect(all).toHaveLength(2)
-  })
-
-  it('should update existing schedule', () => {
-    const store = createStore(tmpDir)
-    store.save({ id: 's1', expr: '0 0 * * *', prompt: 'original' })
-    store.save({ id: 's1', prompt: 'updated' })
-    const got = store.get('s1')
-    expect(got.prompt).toBe('updated')
-    expect(got.updatedAt).toBeDefined()
-  })
-
-  it('should remove a schedule', () => {
-    const store = createStore(tmpDir)
-    store.save({ id: 's1', expr: '0 0 * * *', prompt: 'a' })
-    expect(store.remove('s1')).toBe(true)
-    expect(store.get('s1')).toBeNull()
-    expect(store.list()).toHaveLength(0)
-  })
-
-  it('should return false for removing non-existent schedule', () => {
-    const store = createStore(tmpDir)
-    expect(store.remove('nope')).toBe(false)
-  })
-
-  it('should persist across store instances', () => {
-    const store1 = createStore(tmpDir)
-    store1.save({ id: 's1', expr: '0 0 * * *', prompt: 'persistent' })
-
-    const store2 = createStore(tmpDir)
-    const got = store2.get('s1')
-    expect(got.prompt).toBe('persistent')
-  })
-
-  it('should handle empty/missing file gracefully', () => {
-    const store = createStore(tmpDir)
-    expect(store.list()).toEqual([])
-    expect(store.get('x')).toBeNull()
-  })
-
-  it('should create directory if needed', () => {
-    const nested = path.join(tmpDir, 'deep', 'nested')
-    const store = createStore(nested)
-    store.save({ id: 's1', prompt: 'test' })
-    expect(store.get('s1').prompt).toBe('test')
   })
 })

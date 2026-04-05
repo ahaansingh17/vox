@@ -8,7 +8,7 @@ import { buildAgentPrompt } from './prompts/system.prompt.js'
 import { planningPrompt, journalPrompt, postActionPrompt } from './prompts/iteration.prompts.js'
 import { createReadResultTool, storeResult, STORE_THRESHOLD } from './result.store.js'
 import { summarizeIfNeeded } from './summarize.js'
-import { streamChat } from '../../ai/llm.client.js'
+import { streamChat } from '../../ai/llm/client.js'
 import { CONTEXT_KEEP_RECENT_CHARS } from '../../ai/config.js'
 
 const VERIFY_INTERVAL = 3
@@ -81,6 +81,45 @@ function summarizeResult(result) {
   return 'completed'
 }
 
+const JOURNAL_KEYS = new Set([
+  'understanding',
+  'thoughts',
+  'discoveries',
+  'completed',
+  'currentPlan',
+  'blockers',
+  'clearBlockers',
+  'done',
+  'doneReason'
+])
+
+function tryParseJournalJson(text) {
+  const trimmed = text.trim()
+  const start = trimmed.indexOf('{')
+  if (start === -1) return null
+  let depth = 0
+  let end = -1
+  for (let i = start; i < trimmed.length; i++) {
+    if (trimmed[i] === '{') depth++
+    else if (trimmed[i] === '}') depth--
+    if (depth === 0) {
+      end = i
+      break
+    }
+  }
+  if (end === -1) return null
+  try {
+    const obj = JSON.parse(trimmed.slice(start, end + 1))
+    if (typeof obj !== 'object' || Array.isArray(obj)) return null
+    const keys = Object.keys(obj)
+    if (keys.length === 0) return null
+    if (!keys.some((k) => JOURNAL_KEYS.has(k))) return null
+    return obj
+  } catch {
+    return null
+  }
+}
+
 function selectPrompt(state, journal) {
   const { planningComplete, lastToolName, lastToolResult, actionsSincePlan } = state
   if (!planningComplete) return planningPrompt(journal)
@@ -106,11 +145,10 @@ export { buildAgentPrompt, fetchPastContext, fetchKnowledgePatterns, recordBlock
 
 async function fetchPastContext(instructions) {
   try {
-    const { searchTasksFts } = await import('../../storage/tasks.db.js')
-    const results = searchTasksFts(instructions)
+    const { searchTasksSemantic } = await import('../../storage/tasks.db.js')
+    const results = await searchTasksSemantic(instructions, 3)
     if (results.length === 0) return null
     return results
-      .slice(0, 3)
       .map((t) => `- "${t.instructions}" → ${String(t.result || '').slice(0, 500)}`)
       .join('\n')
   } catch {
@@ -120,8 +158,8 @@ async function fetchPastContext(instructions) {
 
 async function fetchKnowledgePatterns(instructions) {
   try {
-    const { searchKnowledgePatterns } = await import('../../storage/tasks.db.js')
-    const results = searchKnowledgePatterns(instructions)
+    const { searchPatternsSemantic } = await import('../../storage/tasks.db.js')
+    const results = await searchPatternsSemantic(instructions, 5)
     if (results.length === 0) return null
     return results.map((p) => `- When: "${p.trigger}" → Try: "${p.solution}"`).join('\n')
   } catch {
@@ -132,11 +170,16 @@ async function fetchKnowledgePatterns(instructions) {
 async function recordBlockerPatterns(journal) {
   if (!journal.done || journal.blockersEncountered.length === 0) return
   try {
-    const { insertKnowledgePattern } = await import('../../storage/tasks.db.js')
+    const { insertKnowledgePattern, indexPatternEmbedding } =
+      await import('../../storage/tasks.db.js')
     const solution = journal.doneReason || journal.completed.at(-1) || ''
     if (!solution) return
     for (const blocker of journal.blockersEncountered) {
-      insertKnowledgePattern(randomUUID(), String(blocker).slice(0, 500), solution.slice(0, 500))
+      const id = randomUUID()
+      const trigger = String(blocker).slice(0, 500)
+      const sol = solution.slice(0, 500)
+      insertKnowledgePattern(id, trigger, sol)
+      indexPatternEmbedding(id, trigger, sol).catch(() => {})
     }
   } catch {
     /* pattern recording is best-effort */
@@ -214,6 +257,7 @@ export async function runAgentLoop({
       try {
         let roundText = ''
         const toolCalls = []
+        const isPlanning = !state.planningComplete
 
         for await (const event of streamChat({
           messages,
@@ -225,10 +269,26 @@ export async function runAgentLoop({
             if (cleaned) {
               roundText += cleaned
               pendingThought += cleaned
-              emit({ type: 'text', content: cleaned })
+              if (!isPlanning) emit({ type: 'text', content: cleaned })
             }
           } else if (event.type === 'tool_call') {
             toolCalls.push(event)
+          }
+        }
+
+        if (toolCalls.length === 0 && isPlanning && roundText.trim()) {
+          const parsed = tryParseJournalJson(roundText)
+          if (parsed) {
+            try {
+              await tools.execute(JOURNAL_TOOL_NAME, parsed, { signal })
+              emit({ type: 'tool_call', name: JOURNAL_TOOL_NAME, args: parsed })
+              emit({ type: 'tool_result', name: JOURNAL_TOOL_NAME, result: 'ok' })
+              messages.push({ role: 'assistant', content: roundText })
+              messages.push({ role: 'tool', content: 'Journal updated.' })
+              continue
+            } catch {
+              /* fall through to normal handling */
+            }
           }
         }
 

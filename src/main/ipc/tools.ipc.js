@@ -1,33 +1,29 @@
-import { randomUUID } from 'crypto'
 import { registerHandler, createHandler } from './shared'
 import { getMcpToolDefinitions } from '../mcp/mcp.service'
-import { storeGet, storeSet } from '../storage/store'
-
-const STORE_KEY = 'customTools'
+import { getDb } from '../storage/db'
+import {
+  listTools,
+  createTool,
+  updateTool,
+  deleteTool,
+  getToolByName
+} from '@vox-ai-app/storage/tools'
 
 const VALID_SOURCE_TYPES = new Set(['js_function', 'http_webhook', 'desktop', 'mcp'])
 const TOOL_NAME_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/
-
-function loadCustomTools() {
-  return storeGet(STORE_KEY) || []
-}
-
-function saveCustomTools(tools) {
-  storeSet(STORE_KEY, tools)
-}
 
 function mcpDefsToTools(defs) {
   return defs.map((def) => ({
     id: `mcp:${def.name}`,
     name: def.name,
     description: def.description || '',
-    source_type: 'mcp',
-    is_enabled: true
+    sourceType: 'mcp',
+    isEnabled: true
   }))
 }
 
 function allTools() {
-  return [...loadCustomTools(), ...mcpDefsToTools(getMcpToolDefinitions())]
+  return [...listTools(getDb()), ...mcpDefsToTools(getMcpToolDefinitions())]
 }
 
 function validateToolData(data) {
@@ -37,8 +33,8 @@ function validateToolData(data) {
       { code: 'VALIDATION_ERROR' }
     )
   }
-  if (data.source_type && !VALID_SOURCE_TYPES.has(data.source_type)) {
-    throw Object.assign(new Error(`Invalid source_type: ${data.source_type}`), {
+  if (data.sourceType && !VALID_SOURCE_TYPES.has(data.sourceType)) {
+    throw Object.assign(new Error(`Invalid source_type: ${data.sourceType}`), {
       code: 'VALIDATION_ERROR'
     })
   }
@@ -68,38 +64,46 @@ export function registerToolsIpc() {
     'tools:create',
     createHandler((_e, data) => {
       validateToolData(data)
-      const existing = loadCustomTools()
-      if (existing.some((t) => t.name === data.name)) {
+      const db = getDb()
+      if (getToolByName(db, data.name)) {
         throw Object.assign(new Error(`Tool "${data.name}" already exists`), {
           code: 'DUPLICATE'
         })
       }
-      const tool = { id: randomUUID(), is_enabled: true, ...data }
-      existing.push(tool)
-      saveCustomTools(existing)
-      return tool
+      return createTool(db, {
+        name: data.name,
+        description: data.description,
+        parameters: data.parameters,
+        sourceType: data.sourceType || data.source_type,
+        sourceCode: data.sourceCode || data.source_code,
+        webhookUrl: data.webhookUrl || data.webhook_url,
+        webhookHeaders: data.webhookHeaders || data.webhook_headers,
+        isEnabled: data.isEnabled ?? data.is_enabled ?? true,
+        tags: data.tags
+      })
     })
   )
 
   registerHandler(
     'tools:update',
     createHandler((_e, { id, data }) => {
-      const tools = loadCustomTools()
-      const idx = tools.findIndex((t) => t.id === id)
-      if (idx < 0) {
+      if (data?.name) validateToolData(data)
+      const result = updateTool(getDb(), id, {
+        ...data,
+        sourceType: data?.sourceType || data?.source_type,
+        isEnabled: data?.isEnabled ?? data?.is_enabled
+      })
+      if (!result) {
         throw Object.assign(new Error('Tool not found'), { code: 'NOT_FOUND' })
       }
-      if (data?.name) validateToolData(data)
-      tools[idx] = { ...tools[idx], ...data }
-      saveCustomTools(tools)
-      return tools[idx]
+      return result
     })
   )
 
   registerHandler(
     'tools:delete',
     createHandler((_e, { id }) => {
-      saveCustomTools(loadCustomTools().filter((t) => t.id !== id))
+      deleteTool(getDb(), id)
       return { deleted: true }
     })
   )

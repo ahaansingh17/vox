@@ -1,6 +1,6 @@
 {
   "name": "@vox-ai-app/scheduler",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "license": "MIT",
   "description": "Cron-based job scheduler for Vox — schedule recurring agent runs, heartbeats, and timed tasks",
@@ -8,8 +8,7 @@
   "private": false,
   "exports": {
     ".": "./src/index.js",
-    "./cron": "./src/cron.js",
-    "./store": "./src/store.js"
+    "./cron": "./src/cron.js"
   },
   "publishConfig": {
     "access": "public",

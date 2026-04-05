@@ -119,11 +119,11 @@ Nothing is sent off-device.
 
 ## Platform roadmap
 
-| Platform    | Status          | Notes                                                                                                             |
-| ----------- | --------------- | ----------------------------------------------------------------------------------------------------------------- |
-| **macOS**   | Stable (v1.0.6) | Full feature set — voice, iMessage, screen control, email, overlay. Tested on Apple Silicon (M1–M4) and Intel Macs. |
-| **Windows** | Planned         | Core architecture is ready. Needs platform integrations. [Help wanted.](https://github.com/vox-ai-app/vox/issues) |
-| **Linux**   | Planned         | Same path as Windows. [Help wanted.](https://github.com/vox-ai-app/vox/issues)                                    |
+| Platform    | Status          | Notes                                                                                                               |
+| ----------- | --------------- | ------------------------------------------------------------------------------------------------------------------- |
+| **macOS**   | Stable (v1.0.7) | Full feature set — voice, iMessage, screen control, email, overlay. Tested on Apple Silicon (M1–M4) and Intel Macs. |
+| **Windows** | Planned         | Core architecture is ready. Needs platform integrations. [Help wanted.](https://github.com/vox-ai-app/vox/issues)   |
+| **Linux**   | Planned         | Same path as Windows. [Help wanted.](https://github.com/vox-ai-app/vox/issues)                                      |
 
 The only macOS-specific code lives in `@vox-ai-app/integrations`. Everything else — MCP, tools, voice, indexing, parser, storage, UI — is already cross-platform. Adding a new platform means adding implementations alongside the existing `mac/` directory using the factory pattern.
 

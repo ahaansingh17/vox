@@ -7,7 +7,7 @@ import { exec } from 'child_process'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 
 import { addMainBreadcrumb, captureMainException, initMainSentry } from './telemetry/sentry'
-import { logger } from './logger'
+import { logger } from './core/logger'
 import { emitAll } from './ipc/shared'
 import { getDb, closeDb } from './storage/db'
 import { getSetting, SETTINGS_KEYS } from './config/settings'
@@ -15,15 +15,15 @@ import { registerStoreIpc } from './ipc/store.ipc'
 import { registerIndexingIpc, initIndexingStatusPush } from './ipc/indexing.ipc'
 import { registerChatIpc } from './ipc/chat.ipc'
 import { registerToolsIpc } from './ipc/tools.ipc'
-import { registerModelsIpc } from './ai/models.ipc'
+import { registerModelsIpc } from './ai/models/ipc'
 import { registerMcpIpc } from './mcp/mcp.ipc'
 import { registerImessageIpc } from './imessage/imessage.ipc'
 import { registerChannelsIpc } from './channels/channels.ipc'
 import { registerVoiceIpc } from './voice/voice.ipc'
 import { registerPowerIpc, setKeepAwake } from './power/power.ipc'
-import { loadModel, destroyWorker, prewarmChat, setPrewarmProviders } from './ai/llm.bridge'
-import { ensureBinary } from './ai/llm.server'
-import { getActiveModelPath, cleanupPartialDownloads } from './ai/models'
+import { loadModel, destroyWorker, prewarmChat, setPrewarmProviders } from './ai/llm/bridge'
+import { ensureBinary } from './ai/llm/server'
+import { getActiveModelPath, cleanupPartialDownloads } from './ai/models/registry'
 import { connectAllMcpServers, closeAllMcp, setToolInvalidationCallback } from './mcp/mcp.service'
 import {
   invalidateToolDefinitions,
@@ -35,6 +35,7 @@ import { setToolDefinitionProvider } from './chat/task.queue'
 import { startWatching, stopWatching } from './imessage/imessage.service'
 import { initVoiceService, destroyVoiceService } from './voice/voice.service'
 import { initStt, destroyStt, waitSttReady } from './voice/stt.service'
+import { initEmbeddings, destroyEmbeddings } from './ai/embeddings/embed'
 import { createVoiceWindow, destroyVoiceWindow } from './voice/voice.window'
 import {
   createOverlayWindow,
@@ -50,14 +51,18 @@ import {
 } from '@vox-ai-app/indexing'
 import { createTray, destroyTray } from './app/tray'
 import { loadSkills } from './chat/skills.service'
-import { initScheduler, setSchedulerAgentHandler, destroyScheduler } from './scheduler.service'
+import {
+  initScheduler,
+  setSchedulerAgentHandler,
+  destroyScheduler
+} from './scheduler/scheduler.service'
 import {
   setChannelMessageHandler,
   destroyChannels,
   sendToChannel,
   initChannel,
   hasWhatsAppAuth
-} from './channels.service'
+} from './channels/channels.service'
 import { handleChannelMessage } from './channels/channels.sessions'
 import { setChannelQueueHandler, enqueueChannelMessage } from './channels/channels.queue'
 import { initUpdater, installAndRestart } from './updater/updater'
@@ -293,6 +298,13 @@ app
       logger.error('[main] LLM init failed:', err)
     }
 
+    emitSetupPhase('loading-embeddings')
+    try {
+      await initEmbeddings()
+    } catch (err) {
+      logger.warn('[main] Embedding init failed:', err)
+    }
+
     try {
       await initVoiceService()
     } catch (err) {
@@ -353,6 +365,7 @@ let _cleanedUp = false
 function forceCleanup() {
   if (_cleanedUp) return
   _cleanedUp = true
+  destroyEmbeddings()
   destroyVoiceOrchestrator()
   destroyStt()
   destroyWorker()

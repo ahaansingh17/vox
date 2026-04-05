@@ -7,7 +7,7 @@ import {
   destroyChannels,
   setChannelStatusHandler,
   setChannelQrHandler
-} from '../channels.service'
+} from './channels.service'
 import { getRecentActivity, getThread } from './channels.sessions'
 
 export function registerChannelsIpc() {

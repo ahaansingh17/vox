@@ -1,7 +1,7 @@
 import { BrowserWindow, globalShortcut, screen } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
-import { getLlmStatus } from '../ai/llm.bridge'
+import { getLlmStatus } from '../ai/llm/bridge'
 
 let overlayWindow = null
 const OVERLAY_WIDTH = 480

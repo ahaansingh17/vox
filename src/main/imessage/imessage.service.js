@@ -1,5 +1,5 @@
 import { shell } from 'electron'
-import { logger } from '../logger'
+import { logger } from '../core/logger'
 import { emitAll } from '../ipc/shared'
 import { sendMessageAndWait } from '../chat/chat.session'
 import { createIMessageService } from '@vox-ai-app/integrations/imessage'

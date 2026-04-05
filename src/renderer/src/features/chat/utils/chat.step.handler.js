@@ -46,12 +46,12 @@ export const applyStatusEvent = (data, timestamp, setTasks) => {
       createEmptyTaskState(taskId, timestamp)
     const status = String(data?.status || 'updated')
     const normalizedStatus = status.trim().toLowerCase()
-    const message = clipText(data?.message, MAX_DETAIL_LENGTH)
+    const error = clipText(data?.error, MAX_DETAIL_LENGTH)
     const resultPreview = clipText(summarizeValue(data?.result), MAX_DETAIL_LENGTH)
     const history = pushTaskHistory(existing.history, {
       at: timestamp,
       type: normalizedStatus || 'status',
-      detail: clipText(message || resultPreview || `Task ${normalizedStatus || 'updated'}`, 160)
+      detail: clipText(error || resultPreview || `Task ${normalizedStatus || 'updated'}`, 160)
     })
 
     const isTerminal =
@@ -64,15 +64,13 @@ export const applyStatusEvent = (data, timestamp, setTasks) => {
       taskId,
       {
         status,
-        message,
+        error,
         resultPreview,
         currentPlan: isTerminal ? '' : existing.currentPlan,
         completedAt:
           normalizedStatus === 'completed' || normalizedStatus === 'aborted'
             ? existing.completedAt || timestamp
             : existing.completedAt || '',
-        failedAt:
-          normalizedStatus === 'failed' ? existing.failedAt || timestamp : existing.failedAt || '',
         history
       },
       timestamp

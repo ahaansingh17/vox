@@ -7,6 +7,30 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.0.7] - 2026-04-05
+
+### Fixed
+
+- **ONNX WASM path resolution** — `onnxruntime-web` in Node.js tried to fetch WASM binaries from `https://cdn.jsdelivr.net` which Electron's ESM loader rejects (`ERR_UNSUPPORTED_ESM_URL_SCHEME`). Root cause: CJS `require()` and ESM `import()` of `onnxruntime-web` create separate module instances with independent `env` objects — setting `wasmPaths` on the CJS instance had no effect on the ESM instance used by `@huggingface/transformers`. Fix: set `env.backends.onnx.wasm.wasmPaths` on transformers' own env object after import, pointing to local `node_modules/onnxruntime-web/dist/` WASM files.
+- **Postinstall shim for onnxruntime-node** — `@huggingface/transformers` bundles a nested `onnxruntime-node` that crashes in Electron (ABI mismatch). `scripts/patch-onnx.js` replaces it with a one-line shim re-exporting `onnxruntime-web`, runs automatically via `postinstall`.
+- **Storage package restructure** — moved 9 repository files from flat `packages/storage/src/` into `packages/storage/src/repos/` subdirectory with updated exports map.
+- **Stale file cleanup** — removed 11 dead/duplicate files (6 stale `llm.*.js`, 2 root copies, 2 dead chat files, 1 scheduler store).
+- **Scheduler store export** — removed dangling `createStore` export from `@vox-ai-app/scheduler` after `store.js` was deleted.
+- **Test suite fixes** — fixed `getAllSettings` return type assertion, `checkpointId` type, empty catches, unused variables. Tests: 506 passed, 0 failed, 1 skipped.
+- **Lint cleanup** — resolved 8 lint errors across 3 test files.
+
+### Added
+
+- `scripts/patch-onnx.js` — postinstall script that replaces nested `onnxruntime-node` with `onnxruntime-web` shim.
+
+### Changed
+
+- `packages/storage/` — repository files moved to `src/repos/` subdirectory.
+- STT and embedding workers set `env.backends.onnx.wasm.wasmPaths` to local filesystem path before calling `pipeline()`.
+- `postinstall` script now runs `electron-builder install-app-deps && node scripts/patch-onnx.js`.
+
+---
+
 ## [1.0.6] - 2026-04-05
 
 ### Fixed
@@ -63,7 +87,7 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [1.0.3] - 2026-06-14
+## [1.0.3] - 2026-04-03
 
 ### Added
 

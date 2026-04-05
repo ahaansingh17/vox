@@ -1,6 +1,6 @@
 {
   "name": "@vox-ai-app/storage",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "type": "module",
   "license": "MIT",
   "description": "Local message and config persistence for Vox",
@@ -9,9 +9,15 @@
   "exports": {
     ".": "./src/index.js",
     "./db": "./src/db.js",
-    "./messages": "./src/messages.js",
-    "./config": "./src/config.js",
-    "./tasks": "./src/tasks.js"
+    "./messages": "./src/repos/messages.js",
+    "./tasks": "./src/repos/tasks.js",
+    "./tools": "./src/repos/tools.js",
+    "./settings": "./src/repos/settings.js",
+    "./mcp-servers": "./src/repos/mcp-servers.js",
+    "./schedules": "./src/repos/schedules.js",
+    "./tool-secrets": "./src/repos/tool-secrets.js",
+    "./patterns": "./src/repos/patterns.js",
+    "./vectors": "./src/repos/vectors.js"
   },
   "publishConfig": {
     "access": "public",

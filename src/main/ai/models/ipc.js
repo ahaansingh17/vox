@@ -1,4 +1,4 @@
-import { registerHandler, createHandler, emitAll } from '../ipc/shared'
+import { registerHandler, createHandler, emitAll } from '../../ipc/shared'
 import {
   listModels,
   getActiveModelPath,
@@ -9,8 +9,8 @@ import {
   cancelDownload,
   getActiveDownloadProgress,
   getRecommendedModel
-} from './models'
-import { getLlmStatus, reloadModel } from './llm.bridge'
+} from './registry'
+import { getLlmStatus, reloadModel } from '../llm/bridge'
 
 export function registerModelsIpc() {
   registerHandler(

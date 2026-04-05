@@ -1,6 +1,6 @@
 {
   "name": "@vox-ai-app/integrations",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "license": "MIT",
   "description": "macOS integrations (Mail, Screen, iMessage) for Vox",
@@ -8,10 +8,9 @@
   "private": false,
   "exports": {
     ".": "./src/index.js",
-    "./defs": "./src/defs/index.js",
-    "./defs/mail": "./src/defs/mail.js",
-    "./defs/screen": "./src/defs/screen.js",
-    "./defs/imessage": "./src/defs/imessage.js",
+    "./defs/mail": "./src/mail/def.js",
+    "./defs/screen": "./src/screen/def.js",
+    "./defs/imessage": "./src/imessage/def.js",
     "./mail": "./src/mail/index.js",
     "./screen": "./src/screen/index.js",
     "./screen/capture": "./src/screen/capture/index.js",

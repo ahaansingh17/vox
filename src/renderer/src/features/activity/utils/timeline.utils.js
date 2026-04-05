@@ -28,11 +28,11 @@ export const getToolSub = (toolName, argsObj) => {
   return null
 }
 
-export const getOutcomeBadge = (toolName, rawResult) => {
-  if (!rawResult) return null
+export const getOutcomeBadge = (toolName, result) => {
+  if (!result) return null
   const n = String(toolName || '').toLowerCase()
   if (n === 'execute_code' || n.includes('execute') || n === 'run_code') {
-    const r = typeof rawResult === 'string' ? null : rawResult
+    const r = typeof result === 'string' ? null : result
     if (!r) return null
     if (r.timedOut) return { label: 'timed out', type: 'timeout' }
     if (r.exitCode !== undefined && r.exitCode !== 0) return { label: 'failed', type: 'error' }

@@ -25,16 +25,13 @@ vi.mock('../src/main/storage/messages.db', () => ({
     mockMessages.push(msg)
     return msg
   },
-  clearMessages: () => {
-    mockMessages.length = 0
-  },
   saveSummaryCheckpoint: (summary, checkpointId) => {
     mockSummaryCheckpoint = { summary, checkpointId }
   },
   loadSummaryCheckpoint: () => mockSummaryCheckpoint,
-  clearSummaryCheckpoint: () => {
-    mockSummaryCheckpoint = null
-  }
+  indexMessageEmbedding: vi.fn(),
+  getConversationUserInfo: vi.fn(() => mockStore['vox.user.info'] || {}),
+  setConversationUserInfo: vi.fn()
 }))
 
 vi.mock('../src/main/storage/store', () => ({
@@ -52,12 +49,24 @@ vi.mock('../src/main/mcp/mcp.service', () => ({
   getMcpToolDefinitions: () => []
 }))
 
+vi.mock('@vox-ai-app/storage/tools', () => ({
+  listTools: vi.fn((db, enabledOnly) => {
+    const tools = mockStore['customTools'] || []
+    if (enabledOnly) return tools.filter((t) => t.is_enabled !== false && t.isEnabled !== false)
+    return tools
+  })
+}))
+
+vi.mock('../src/main/storage/db', () => ({
+  getDb: vi.fn(() => ({}))
+}))
+
 vi.mock('../src/main/storage/tasks.db', () => ({
   getUnreportedTerminalTasks: () => [],
   markTaskReported: vi.fn()
 }))
 
-vi.mock('../src/main/ai/llm.bridge', () => ({
+vi.mock('../src/main/ai/llm/bridge', () => ({
   sendChatMessage: vi.fn(),
   abortChat: vi.fn(),
   clearChat: vi.fn().mockResolvedValue(undefined),
@@ -78,7 +87,7 @@ vi.mock('../src/main/chat/spawn.tool', () => ({
   }
 }))
 
-vi.mock('../src/main/logger', () => ({
+vi.mock('../src/main/core/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
 }))
 
@@ -90,19 +99,6 @@ beforeEach(() => {
 
 describe('sanitizeHistory', async () => {
   const mod = await import('../src/main/chat/chat.session.js')
-
-  function _callSanitize(messages) {
-    const getMessages = vi.fn(() => messages)
-    vi.doMock('../src/main/storage/messages.db', () => ({
-      getMessages,
-      getMessagesBeforeId: vi.fn(() => []),
-      appendMessage: vi.fn(),
-      clearMessages: vi.fn(),
-      saveSummaryCheckpoint: vi.fn(),
-      loadSummaryCheckpoint: () => null,
-      clearSummaryCheckpoint: vi.fn()
-    }))
-  }
 
   it('should keep short but meaningful assistant messages', () => {
     const msgs = [
@@ -165,7 +161,7 @@ describe('sanitizeHistory', async () => {
 describe('sendMessage', async () => {
   const mod = await import('../src/main/chat/chat.session.js')
   const { waitForChatResult, sendChatMessage: _sendChatMessage } =
-    await import('../src/main/ai/llm.bridge')
+    await import('../src/main/ai/llm/bridge')
   const { emitAll } = await import('../src/main/ipc/shared')
 
   it('should persist user message to DB before dispatching', async () => {
@@ -269,23 +265,6 @@ describe('getSystemPrompt', async () => {
   })
 })
 
-describe('clearConversation', async () => {
-  const mod = await import('../src/main/chat/chat.session.js')
-  const { emitAll } = await import('../src/main/ipc/shared')
-
-  it('should clear all messages and summary state', async () => {
-    mockMessages.push({ id: 1, role: 'user', content: 'hi' })
-    mockSummaryCheckpoint = { summary: 'old', checkpointId: 1 }
-    await mod.clearConversation()
-    expect(mockMessages.length).toBe(0)
-    expect(mockSummaryCheckpoint).toBeNull()
-    expect(emitAll).toHaveBeenCalledWith('chat:event', {
-      type: 'msg:replace-all',
-      data: { messages: [], hasMore: false }
-    })
-  })
-})
-
 describe('getChatStatus', async () => {
   const mod = await import('../src/main/chat/chat.session.js')
 
@@ -331,12 +310,20 @@ describe('getToolDefinitions', async () => {
     expect(defs.some((d) => d.name === 'run_tool')).toBe(true)
   })
 
+  it('should always include manage_tool even with no custom tools', () => {
+    mockStore['customTools'] = []
+    mod.invalidateToolDefinitions()
+    const defs = mod.getToolDefinitions()
+    expect(defs.some((d) => d.name === 'manage_tool')).toBe(true)
+  })
+
   it('should not include find_tools when no custom tools enabled', () => {
     mockStore['customTools'] = [{ name: 'disabled_tool', description: 'test', is_enabled: false }]
     mod.invalidateToolDefinitions()
     const defs = mod.getToolDefinitions()
     expect(defs.some((d) => d.name === 'find_tools')).toBe(false)
     expect(defs.some((d) => d.name === 'run_tool')).toBe(false)
+    expect(defs.some((d) => d.name === 'manage_tool')).toBe(true)
   })
 
   it('should be cacheable and invalidatable', () => {

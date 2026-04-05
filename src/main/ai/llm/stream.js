@@ -1,6 +1,6 @@
-import { emitAll } from '../ipc/shared'
-import { logger } from '../logger'
-import { CONTEXT_SIZE } from './config.js'
+import { emitAll } from '../../ipc/shared'
+import { logger } from '../../core/logger'
+import { CONTEXT_SIZE } from '../config.js'
 
 let _activeStreamId = null
 let _voiceTextHandler = null

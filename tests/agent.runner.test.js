@@ -10,7 +10,7 @@ vi.mock('crypto', () => ({
   })
 }))
 
-vi.mock('../src/main/ai/llm.client.js', () => ({
+vi.mock('../src/main/ai/llm/client.js', () => ({
   streamChat: vi.fn(async function* () {
     yield { type: 'text', content: '' }
   }),
@@ -19,7 +19,7 @@ vi.mock('../src/main/ai/llm.client.js', () => ({
   healthCheck: vi.fn()
 }))
 
-vi.mock('../src/main/ai/llm.server.js', () => ({
+vi.mock('../src/main/ai/llm/server.js', () => ({
   getBaseUrl: () => 'http://localhost:19741',
   isReady: () => true,
   startServer: vi.fn(),
@@ -36,7 +36,8 @@ vi.mock('../src/main/ai/config.js', () => ({
 vi.mock('../src/main/storage/tasks.db.js', () => ({
   searchTasksFts: vi.fn(() => []),
   searchKnowledgePatterns: vi.fn(() => []),
-  insertKnowledgePattern: vi.fn()
+  insertKnowledgePattern: vi.fn(),
+  indexTaskEmbedding: vi.fn(async () => {})
 }))
 
 describe('createJournal', async () => {
@@ -491,17 +492,17 @@ describe('task.builders', async () => {
     expect(event.taskId).toBe('t1')
     expect(event.type).toBe('tool_call')
     expect(event.name).toBe('search')
-    expect(event.timestamp).toBeTruthy()
+    expect(event.createdAt).toBeTruthy()
   })
 
-  it('buildActivityEvent should include rawResult for tool_result', () => {
+  it('buildActivityEvent should include result for tool_result', () => {
     const event = buildActivityEvent('t1', { type: 'tool_result', result: 'found it' })
-    expect(event.rawResult).toBe('found it')
+    expect(event.result).toBe('found it')
   })
 
-  it('buildActivityEvent should not include rawResult for non-tool_result', () => {
+  it('buildActivityEvent should not include result for non-tool_result', () => {
     const event = buildActivityEvent('t1', { type: 'tool_call', name: 'x' })
-    expect(event.rawResult).toBeNull()
+    expect(event.result).toBeNull()
   })
 })
 
@@ -525,7 +526,7 @@ describe('runAgentLoop', async () => {
   }
 
   it('should assign correct tool_call_id when same tool called multiple times', async () => {
-    const { streamChat } = await import('../src/main/ai/llm.client.js')
+    const { streamChat } = await import('../src/main/ai/llm/client.js')
     const capturedMessages = []
     let callCount = 0
 
@@ -585,7 +586,7 @@ describe('runAgentLoop', async () => {
   })
 
   it('should emit tool_call and tool_result events for each tool', async () => {
-    const { streamChat } = await import('../src/main/ai/llm.client.js')
+    const { streamChat } = await import('../src/main/ai/llm/client.js')
     let callCount = 0
 
     streamChat.mockImplementation(async function* () {
@@ -625,7 +626,7 @@ describe('runAgentLoop', async () => {
   })
 
   it('should stop after max no-progress iterations', async () => {
-    const { streamChat } = await import('../src/main/ai/llm.client.js')
+    const { streamChat } = await import('../src/main/ai/llm/client.js')
 
     streamChat.mockImplementation(async function* () {
       yield { type: 'text', content: 'thinking...' }
@@ -651,7 +652,7 @@ describe('runAgentLoop', async () => {
   })
 
   it('should respect abort signal', async () => {
-    const { streamChat } = await import('../src/main/ai/llm.client.js')
+    const { streamChat } = await import('../src/main/ai/llm/client.js')
     const controller = new AbortController()
     controller.abort()
 

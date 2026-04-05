@@ -1,8 +1,13 @@
 import Database from 'better-sqlite3'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
+import { runMigrations } from './migrations/runner.js'
+import * as initialSchema from './migrations/001_initial_schema.js'
+import * as taskActivityTypes from './migrations/002_task_activity_types.js'
 
 const dbs = new Map()
+
+const migrations = [initialSchema, taskActivityTypes]
 
 function resolveDbPath(dbPath) {
   const normalized = String(dbPath || '').trim()
@@ -11,132 +16,10 @@ function resolveDbPath(dbPath) {
   }
   return path.resolve(normalized)
 }
-
 function prepareDb(db) {
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS conversations (
-      id TEXT PRIMARY KEY,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS messages (
-      id TEXT PRIMARY KEY,
-      conversation_id TEXT NOT NULL,
-      role TEXT NOT NULL,
-      content TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_messages_conversation_id_id
-      ON messages (conversation_id, id);
-
-    CREATE TABLE IF NOT EXISTS tasks (
-      task_id TEXT PRIMARY KEY,
-      instructions TEXT NOT NULL DEFAULT '',
-      context TEXT NOT NULL DEFAULT '',
-      status TEXT NOT NULL DEFAULT 'queued',
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      current_plan TEXT NOT NULL DEFAULT '',
-      message TEXT NOT NULL DEFAULT '',
-      result TEXT,
-      completed_at TEXT NOT NULL DEFAULT '',
-      failed_at TEXT NOT NULL DEFAULT ''
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_tasks_created_at
-      ON tasks (created_at DESC, task_id DESC);
-
-    CREATE TABLE IF NOT EXISTS task_activity (
-      id TEXT PRIMARY KEY,
-      task_id TEXT NOT NULL,
-      type TEXT NOT NULL,
-      name TEXT,
-      raw_result TEXT,
-      timestamp TEXT NOT NULL,
-      data TEXT NOT NULL DEFAULT '{}',
-      FOREIGN KEY (task_id) REFERENCES tasks(task_id) ON DELETE CASCADE
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_task_activity_timestamp
-      ON task_activity (timestamp ASC, id ASC);
-
-    CREATE INDEX IF NOT EXISTS idx_task_activity_task_id
-      ON task_activity (task_id, timestamp ASC, id ASC);
-  `)
-
-  try {
-    db.exec(`ALTER TABLE tasks ADD COLUMN reported INTEGER NOT NULL DEFAULT 0`)
-  } catch {
-    /* */
-  }
-
-  try {
-    db.exec(`ALTER TABLE conversations ADD COLUMN context_summary TEXT`)
-  } catch {
-    /* */
-  }
-
-  try {
-    db.exec(`ALTER TABLE conversations ADD COLUMN context_checkpoint_id INTEGER`)
-  } catch {
-    /* */
-  }
-
-  try {
-    const { randomUUID } = require('crypto')
-    const nullRows = db.prepare(`SELECT rowid FROM messages WHERE id IS NULL OR id = ''`).all()
-    if (nullRows.length > 0) {
-      const update = db.prepare(`UPDATE messages SET id = ? WHERE rowid = ?`)
-      const tx = db.transaction(() => {
-        for (const row of nullRows) {
-          update.run(randomUUID(), row.rowid)
-        }
-      })
-      tx()
-    }
-  } catch {
-    /* migration best-effort */
-  }
-
-  try {
-    db.exec(`
-      CREATE VIRTUAL TABLE IF NOT EXISTS tasks_fts USING fts5(
-        task_id UNINDEXED,
-        instructions,
-        result,
-        tokenize = 'unicode61'
-      )
-    `)
-  } catch {
-    /* table may already exist */
-  }
-
-  try {
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS knowledge_patterns (
-        id TEXT PRIMARY KEY,
-        trigger TEXT NOT NULL,
-        solution TEXT NOT NULL,
-        created_at TEXT NOT NULL
-      )
-    `)
-    db.exec(`
-      CREATE VIRTUAL TABLE IF NOT EXISTS patterns_fts USING fts5(
-        pattern_id UNINDEXED,
-        trigger,
-        solution,
-        tokenize = 'unicode61'
-      )
-    `)
-  } catch {
-    /* tables may already exist */
-  }
+  runMigrations(db, migrations)
 }
 
 export function openDb(dbPath) {

@@ -6,7 +6,7 @@ vi.mock('../src/main/ipc/shared', () => ({
   emitAll: (...args) => mockEmitAll(...args)
 }))
 
-vi.mock('../src/main/logger', () => ({
+vi.mock('../src/main/core/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
 }))
 
@@ -19,7 +19,7 @@ const {
   resetStreamState,
   setChatStreamHandlers,
   clearChatStreamHandlers
-} = await import('../src/main/ai/llm.stream.js')
+} = await import('../src/main/ai/llm/stream.js')
 
 beforeEach(() => {
   mockEmitAll.mockClear()

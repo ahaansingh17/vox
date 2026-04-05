@@ -1,11 +1,5 @@
 const { parentPort } = require('worker_threads')
-
-const Module = require('module')
-const _resolveFilename = Module._resolveFilename
-Module._resolveFilename = function (request, ...args) {
-  if (request === 'onnxruntime-node') throw new Error('blocked')
-  return _resolveFilename.call(this, request, ...args)
-}
+const path = require('path')
 
 let transcriber = null
 
@@ -13,6 +7,8 @@ async function init(cacheDir) {
   const { pipeline, env } = await import('@huggingface/transformers')
   env.cacheDir = cacheDir
   env.allowRemoteModels = true
+  env.backends.onnx.wasm.wasmPaths = path.dirname(require.resolve('onnxruntime-web')) + '/'
+  env.backends.onnx.wasm.proxy = false
 
   parentPort.postMessage({ type: 'status', status: 'downloading' })
 

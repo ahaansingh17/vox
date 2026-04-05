@@ -2,8 +2,37 @@ import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { mkdtempSync, writeFileSync, existsSync, readFileSync, rmSync } from 'fs'
+import { execSync } from 'child_process'
 
 const testDir = mkdtempSync(join(tmpdir(), 'vox-tool-audit-'))
+
+let hasQuartz = false
+if (process.platform === 'darwin') {
+  try {
+    execSync('python3 -c "import Quartz"', { stdio: 'ignore' })
+    hasQuartz = true
+  } catch {
+    /* Quartz not installed */
+  }
+}
+const mockToolStore = []
+
+function normToCamel(t) {
+  return {
+    id: t.id || `tool-${Math.random().toString(36).slice(2)}`,
+    name: t.name,
+    description: t.description || '',
+    parameters: t.parameters || { type: 'object', properties: {} },
+    sourceType: t.source_type || t.sourceType || 'js_function',
+    sourceCode: t.source_code || t.sourceCode || '',
+    webhookUrl: t.webhook_url || t.webhookUrl || '',
+    tags: t.tags || [],
+    isEnabled:
+      t.is_enabled !== undefined ? t.is_enabled : t.isEnabled !== undefined ? t.isEnabled : true,
+    createdAt: t.created_at || t.createdAt || new Date().toISOString(),
+    updatedAt: t.updated_at || t.updatedAt || new Date().toISOString()
+  }
+}
 
 afterAll(() => {
   try {
@@ -14,6 +43,7 @@ afterAll(() => {
 })
 
 vi.mock('electron', () => ({
+  app: { getPath: () => '/tmp/vox-test' },
   dialog: {
     showOpenDialog: vi.fn().mockResolvedValue({ canceled: false, filePaths: ['/test/file.txt'] })
   },
@@ -28,6 +58,11 @@ vi.mock('../src/main/storage/store', () => {
   return {
     storeGet: (key) => store[key] ?? null,
     storeSet: (key, val) => {
+      if (key === 'customTools') {
+        mockToolStore.length = 0
+        if (Array.isArray(val)) val.forEach((t) => mockToolStore.push(normToCamel(t)))
+        return
+      }
       store[key] = val
     },
     storeDelete: (key) => {
@@ -37,6 +72,7 @@ vi.mock('../src/main/storage/store', () => {
     _store: store,
     _reset: () => {
       for (const k of Object.keys(store)) delete store[k]
+      mockToolStore.length = 0
     }
   }
 })
@@ -64,10 +100,64 @@ vi.mock('../src/main/chat/chat.session', () => ({
 }))
 
 vi.mock('../src/main/storage/tasks.db', () => ({
-  searchTasksFts: vi.fn(() => [])
+  searchTasksFts: vi.fn(() => []),
+  searchTasksSemantic: vi.fn(async () => [])
 }))
 
-vi.mock('../src/main/logger', () => ({
+vi.mock('../src/main/storage/tasks.db.js', () => ({
+  searchTasksFts: vi.fn(() => []),
+  searchTasksSemantic: vi.fn(async () => [])
+}))
+
+vi.mock('../src/main/storage/messages.db.js', () => {
+  let userInfo = {}
+  return {
+    searchMessagesSemantic: vi.fn(async () => []),
+    searchMessagesFts: vi.fn(() => []),
+    getConversationUserInfo: vi.fn(() => ({ ...userInfo })),
+    setConversationUserInfo: vi.fn((data) => {
+      userInfo = { ...data }
+    }),
+    _resetUserInfo: () => {
+      userInfo = {}
+    }
+  }
+})
+
+vi.mock('@vox-ai-app/storage/tools', () => ({
+  listTools: vi.fn((db, enabledOnly) => {
+    if (enabledOnly) return mockToolStore.filter((t) => t.isEnabled !== false)
+    return [...mockToolStore]
+  }),
+  getToolByName: vi.fn((db, name) => mockToolStore.find((t) => t.name === name) || null),
+  createTool: vi.fn((db, tool) => {
+    const newTool = {
+      id: `tool-${Date.now()}`,
+      ...tool,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+    mockToolStore.push(newTool)
+    return newTool
+  }),
+  updateTool: vi.fn((db, id, updates) => {
+    const idx = mockToolStore.findIndex((t) => t.id === id)
+    if (idx < 0) return null
+    mockToolStore[idx] = { ...mockToolStore[idx], ...updates, updatedAt: new Date().toISOString() }
+    return mockToolStore[idx]
+  }),
+  deleteTool: vi.fn((db, id) => {
+    const idx = mockToolStore.findIndex((t) => t.id === id)
+    if (idx >= 0) mockToolStore.splice(idx, 1)
+  }),
+  getTool: vi.fn((db, id) => mockToolStore.find((t) => t.id === id) || null)
+}))
+
+vi.mock('../src/main/storage/db.js', () => ({
+  getDb: vi.fn(() => ({}))
+}))
+
+vi.mock('../src/main/core/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
 }))
 
@@ -328,8 +418,7 @@ describe('SCREEN TOOLS - live execution (macOS only)', () => {
     expect(apps.length).toBeGreaterThan(0)
   })
 
-  it('get_mouse_position: returns coordinates', async () => {
-    if (process.platform !== 'darwin') return
+  it.skipIf(!hasQuartz)('get_mouse_position: returns coordinates', async () => {
     const { getMousePosition } =
       await import('../packages/integrations/src/screen/control/index.js')
     const result = await getMousePosition()
@@ -359,16 +448,19 @@ describe('ELECTRON-LEVEL TOOLS - via tool executor', () => {
   let executeElectronTool, storeMod
 
   beforeEach(async () => {
-    const mod = await import('../src/main/ai/llm.tool-executor.js')
+    const mod = await import('../src/main/ai/llm/tool-executor.js')
     executeElectronTool = mod.executeElectronTool
     storeMod = await import('../src/main/storage/store')
     storeMod._reset()
+    const msgDb = await import('../src/main/storage/messages.db.js')
+    if (msgDb._resetUserInfo) msgDb._resetUserInfo()
   })
 
   it('save_user_info: saves and accumulates', async () => {
     await executeElectronTool('save_user_info', { info_key: 'city', info_value: 'NYC' })
     await executeElectronTool('save_user_info', { info_key: 'job', info_value: 'eng' })
-    const info = storeMod.storeGet('vox.user.info')
+    const { getConversationUserInfo } = await import('../src/main/storage/messages.db.js')
+    const info = getConversationUserInfo()
     expect(info.city).toBe('NYC')
     expect(info.job).toBe('eng')
   })
@@ -420,10 +512,10 @@ describe('ELECTRON-LEVEL TOOLS - via tool executor', () => {
   })
 
   it('spawn_task: spawns and returns taskId', async () => {
-    const result = JSON.parse(
-      await executeElectronTool('spawn_task', { instructions: 'test task' })
-    )
-    expect(result.taskId).toBeDefined()
+    const output = await executeElectronTool('spawn_task', { instructions: 'test task' })
+    expect(output.endTurn).toBe(true)
+    const result = JSON.parse(output.result)
+    expect(result.id).toBeDefined()
     expect(result.status).toBe('spawned')
   })
 

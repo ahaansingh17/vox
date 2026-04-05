@@ -2,7 +2,6 @@ import { registerHandler, createHandler } from './shared'
 import {
   sendMessage,
   abort,
-  clearConversation,
   loadOlderStoredMessages,
   getStoredMessagesPage,
   getChatStatus,
@@ -44,11 +43,7 @@ export function registerChatIpc() {
   registerHandler(
     'chat:send-message',
     createHandler(async (_e, payload) => {
-      const _perfId = `[PERF] ipc:chat:send-message #${Date.now()}`
-      console.time(_perfId)
-      const result = await sendMessage(payload || {})
-      console.timeEnd(_perfId)
-      return result
+      return sendMessage(payload || {})
     })
   )
 
@@ -71,11 +66,6 @@ export function registerChatIpc() {
       abort()
       return { aborted: true }
     })
-  )
-
-  registerHandler(
-    'chat:clear',
-    createHandler(async () => clearConversation())
   )
 
   registerHandler(

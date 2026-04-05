@@ -3,9 +3,9 @@ import { join, basename } from 'path'
 import { totalmem } from 'os'
 import { readdirSync, statSync, mkdirSync, existsSync, unlinkSync, createWriteStream } from 'fs'
 import { execSync } from 'child_process'
-import { storeGet, storeSet, storeDelete } from '../storage/store'
-import { emitAll } from '../ipc/shared'
-import { logger } from '../logger'
+import { storeGet, storeSet, storeDelete } from '../../storage/store'
+import { emitAll } from '../../ipc/shared'
+import { logger } from '../../core/logger'
 
 const STORE_KEY_ACTIVE = 'activeModelPath'
 const STORE_KEY_REGISTRY = 'modelRegistry'
@@ -18,7 +18,8 @@ export function getModelsDir() {
 }
 
 export function getRegistry() {
-  return storeGet(STORE_KEY_REGISTRY) || []
+  const stored = storeGet(STORE_KEY_REGISTRY)
+  return Array.isArray(stored) ? stored : []
 }
 
 function saveRegistry(registry) {
@@ -88,13 +89,6 @@ export function listModels() {
 export function getActiveModelPath() {
   const stored = storeGet(STORE_KEY_ACTIVE)
   if (stored && existsSync(stored)) return stored
-
-  const models = listModels()
-  if (models.length > 0) {
-    storeSet(STORE_KEY_ACTIVE, models[0].path)
-    return models[0].path
-  }
-
   return null
 }
 
@@ -133,7 +127,7 @@ export async function downloadModel({ hfRepo, hfFile, onProgress } = {}) {
   }
 
   const freeBytes = getFreeDiskBytes()
-  const curated = (await import('./curated.models.js')).CURATED_MODELS
+  const curated = (await import('./curated.js')).CURATED_MODELS
   const match = curated.find((m) => m.hfFile === hfFile)
   const requiredBytes = (match?.sizeGB || 5) * 1e9 + MIN_FREE_DISK_GB * 1e9
   if (freeBytes < requiredBytes) {
@@ -264,7 +258,7 @@ export async function deleteModel(path) {
   const isActive = active === path
 
   if (isActive) {
-    const { clearChat } = await import('./llm.bridge.js')
+    const { clearChat } = await import('../llm/bridge.js')
     try {
       await clearChat()
     } catch {
@@ -281,18 +275,7 @@ export async function deleteModel(path) {
   removeRegistryEntry(path)
 
   if (isActive) {
-    const remaining = listModels()
-    if (remaining.length > 0) {
-      storeSet(STORE_KEY_ACTIVE, remaining[0].path)
-      const { reloadModel } = await import('./llm.bridge.js')
-      try {
-        await reloadModel(remaining[0].path)
-      } catch {
-        /* will be picked up on next message */
-      }
-    } else {
-      emitAll('models:no-model', {})
-    }
+    emitAll('models:no-model', {})
   }
 }
 

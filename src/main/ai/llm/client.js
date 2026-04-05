@@ -1,4 +1,4 @@
-import { getBaseUrl, isReady } from './llm.server.js'
+import { getBaseUrl, isReady } from './server.js'
 
 export async function chatCompletion({
   messages,
@@ -8,8 +8,6 @@ export async function chatCompletion({
   maxTokens = 4096,
   signal
 } = {}) {
-  const _perfId = `[PERF] chatCompletion (stream=${stream}) #${Date.now()}`
-  console.time(_perfId)
   if (!isReady()) throw new Error('LLM server not ready')
 
   const body = {
@@ -32,26 +30,20 @@ export async function chatCompletion({
     body.tool_choice = 'auto'
   }
 
-  console.time(`${_perfId} fetch`)
   const resp = await fetch(`${getBaseUrl()}/v1/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
     signal
   })
-  console.timeEnd(`${_perfId} fetch`)
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => '')
     throw new Error(`LLM server error ${resp.status}: ${text}`)
   }
 
-  if (!stream) {
-    console.timeEnd(_perfId)
-    return resp.json()
-  }
+  if (!stream) return resp.json()
 
-  console.timeEnd(_perfId)
   return parseSSEStream(resp.body, signal)
 }
 
@@ -94,11 +86,6 @@ export async function* streamChat({
   maxTokens = 4096,
   signal
 } = {}) {
-  const _streamPerfId = `[PERF] streamChat #${Date.now()}`
-  console.time(_streamPerfId)
-  let _firstTokenLogged = false
-  const _streamStart = performance.now()
-
   const chunks = await chatCompletion({
     messages,
     tools,
@@ -120,12 +107,6 @@ export async function* streamChat({
     if (!delta) continue
 
     if (delta.content) {
-      if (!_firstTokenLogged) {
-        console.log(
-          `${_streamPerfId} FIRST TOKEN: ${(performance.now() - _streamStart).toFixed(0)}ms`
-        )
-        _firstTokenLogged = true
-      }
       yield { type: 'text', content: delta.content }
     }
 
@@ -156,7 +137,6 @@ export async function* streamChat({
         pendingToolCalls = new Map()
       }
       if (choice.finish_reason === 'stop') {
-        console.timeEnd(_streamPerfId)
         yield { type: 'done' }
       }
     }
@@ -174,10 +154,6 @@ export async function* streamChat({
     }
     pendingToolCalls = new Map()
   }
-
-  console.log(
-    `${_streamPerfId} stream ended (total: ${(performance.now() - _streamStart).toFixed(0)}ms)`
-  )
 }
 
 export async function nonStreamChat({

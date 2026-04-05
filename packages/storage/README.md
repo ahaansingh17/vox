@@ -1,6 +1,6 @@
 # @vox-ai-app/storage
 
-Local persistence for Vox: conversations, messages, tasks, task activity, and key-value config. Built on SQLite via `better-sqlite3` with WAL mode.
+Local persistence for Vox: conversations, messages, tasks, settings, tool registry, MCP servers, schedules, secrets, patterns, and vector embeddings. Built on SQLite via `better-sqlite3` with WAL mode and automatic migrations.
 
 ## Install
 
@@ -10,13 +10,19 @@ npm install @vox-ai-app/storage
 
 ## Exports
 
-| Export                         | Contents                        |
-| ------------------------------ | ------------------------------- |
-| `@vox-ai-app/storage`          | All exports                     |
-| `@vox-ai-app/storage/db`       | Database lifecycle (open/close) |
-| `@vox-ai-app/storage/messages` | Conversations and messages      |
-| `@vox-ai-app/storage/config`   | Key-value config persistence    |
-| `@vox-ai-app/storage/tasks`    | Task and task activity storage  |
+| Export                             | Contents                        |
+| ---------------------------------- | ------------------------------- |
+| `@vox-ai-app/storage`              | All exports                     |
+| `@vox-ai-app/storage/db`           | Database lifecycle (open/close) |
+| `@vox-ai-app/storage/messages`     | Conversations and messages      |
+| `@vox-ai-app/storage/tasks`        | Task and task activity storage  |
+| `@vox-ai-app/storage/tools`        | Custom tool definitions         |
+| `@vox-ai-app/storage/settings`     | Key-value settings persistence  |
+| `@vox-ai-app/storage/mcp-servers`  | MCP server configurations       |
+| `@vox-ai-app/storage/schedules`    | Scheduled job persistence       |
+| `@vox-ai-app/storage/tool-secrets` | Encrypted tool secret storage   |
+| `@vox-ai-app/storage/patterns`     | Conversation pattern storage    |
+| `@vox-ai-app/storage/vectors`      | Vector embedding storage        |
 
 ## Database
 
@@ -24,12 +30,10 @@ npm install @vox-ai-app/storage
 import { openDb, closeDb } from '@vox-ai-app/storage/db'
 
 const db = openDb('/path/to/storage.db')
-// tables are auto-created on first open
-
 closeDb('/path/to/storage.db')
 ```
 
-The database uses WAL journal mode and foreign keys. Tables for conversations, messages, tasks, and task activity are created automatically.
+The database uses WAL journal mode and foreign keys. Schema is managed via migrations in `src/migrations/`.
 
 ## Messages
 
@@ -89,17 +93,15 @@ appendTaskActivity(db, {
 const activity = loadTaskActivity(db, 'abc-123')
 ```
 
-## Config
-
-JSON file-based key-value store with atomic writes (write to temp, rename).
+## Settings
 
 ```js
-import { configGet, configSet, configDelete, configGetAll } from '@vox-ai-app/storage/config'
+import { getSetting, setSetting, getAllSettings, deleteSetting } from '@vox-ai-app/storage/settings'
 
-configSet('/path/to/config.json', 'theme', 'dark')
-const theme = configGet('/path/to/config.json', 'theme')
-configDelete('/path/to/config.json', 'theme')
-const all = configGetAll('/path/to/config.json')
+setSetting(db, 'theme', 'dark')
+const theme = getSetting(db, 'theme')
+const all = getAllSettings(db)
+deleteSetting(db, 'theme')
 ```
 
 ## License

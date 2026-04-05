@@ -7,19 +7,17 @@ import {
   writeFileSync,
   readFileSync,
   createWriteStream,
-  readdirSync,
   renameSync,
   rmSync
 } from 'fs'
 import { app } from 'electron'
-import { logger } from '../logger'
-import { emitAll } from '../ipc/shared'
+import { logger } from '../../core/logger'
+import { emitAll } from '../../ipc/shared'
 
 const DEFAULT_PORT = 19741
 const HEALTH_POLL_MS = 300
 const MAX_HEALTH_POLLS = 400
 const LLAMA_SERVER_VERSION = 'b8635'
-const INSTALL_REVISION = 2
 
 let _process = null
 let _port = DEFAULT_PORT
@@ -79,11 +77,7 @@ function findBinary() {
   if (existsSync(bundled)) return bundled
 
   const managed = getManagedBinaryPath()
-  if (
-    existsSync(managed) &&
-    getInstalledVersion() === `${LLAMA_SERVER_VERSION}.${INSTALL_REVISION}`
-  )
-    return managed
+  if (existsSync(managed) && getInstalledVersion() === LLAMA_SERVER_VERSION) return managed
 
   const brewArm = '/opt/homebrew/bin/llama-server'
   if (existsSync(brewArm)) return brewArm
@@ -153,27 +147,15 @@ export async function ensureBinary() {
     renameSync(found, binaryPath)
     chmodSync(binaryPath, 0o755)
 
-    const foundDir = found.substring(0, found.lastIndexOf('/'))
-    const libExts = ['.dylib', '.so', '.dll']
-    for (const f of readdirSync(foundDir)) {
-      if (libExts.some((ext) => f.includes(ext))) {
-        const src = join(foundDir, f)
-        const dst = join(binDir, f)
-        if (existsSync(dst)) rmSync(dst)
-        renameSync(src, dst)
-        chmodSync(dst, 0o755)
-      }
-    }
-
     if (process.platform === 'darwin') {
       try {
-        execSync(`xattr -dr com.apple.quarantine "${binDir}"/*`)
+        execSync(`xattr -dr com.apple.quarantine "${binaryPath}"`)
       } catch {
         /* ok */
       }
     }
 
-    writeFileSync(getVersionFilePath(), `${LLAMA_SERVER_VERSION}.${INSTALL_REVISION}`)
+    writeFileSync(getVersionFilePath(), LLAMA_SERVER_VERSION)
 
     logger.info('[llm.server] Installed llama-server', LLAMA_SERVER_VERSION, 'at', binaryPath)
     emitAll('engine:status', { status: 'ready', version: LLAMA_SERVER_VERSION })
@@ -213,9 +195,6 @@ export function getModelPath() {
 }
 
 async function waitForHealth() {
-  const _perfId = `[PERF] waitForHealth #${Date.now()}`
-  console.time(_perfId)
-
   let processExited = false
   const onExit = () => {
     processExited = true
@@ -225,25 +204,19 @@ async function waitForHealth() {
   try {
     for (let i = 0; i < MAX_HEALTH_POLLS; i++) {
       if (processExited || !_process) {
-        console.timeEnd(_perfId)
         throw new Error('llama-server process exited before becoming healthy')
       }
       try {
         const resp = await fetch(`${getBaseUrl()}/health`)
         if (resp.ok) {
           const body = await resp.json()
-          if (body.status === 'ok') {
-            console.timeEnd(_perfId)
-            console.log(`${_perfId} healthy after ${i + 1} polls`)
-            return true
-          }
+          if (body.status === 'ok') return true
         }
       } catch {
         // server not up yet
       }
       await new Promise((r) => setTimeout(r, HEALTH_POLL_MS))
     }
-    console.timeEnd(_perfId)
     throw new Error('llama-server failed to become healthy')
   } finally {
     _process?.removeListener('exit', onExit)
@@ -251,18 +224,14 @@ async function waitForHealth() {
 }
 
 export async function startServer(modelPath, { contextSize = 32768, nGpuLayers = -1, port } = {}) {
-  console.time('[PERF] startServer total')
   if (_process) {
-    console.time('[PERF] stopServer (during restart)')
     await stopServer()
-    console.timeEnd('[PERF] stopServer (during restart)')
   }
 
   _port = port || DEFAULT_PORT
   _modelPath = modelPath
   _ready = false
 
-  console.time('[PERF] killStaleOnPort')
   try {
     const pids = execSync(`lsof -ti :${_port}`, { encoding: 'utf-8' }).trim()
     if (pids) {
@@ -271,7 +240,7 @@ export async function startServer(modelPath, { contextSize = 32768, nGpuLayers =
         try {
           process.kill(Number(pid), 'SIGKILL')
         } catch {
-          /* expected */
+          /* pid already gone */
         }
       }
       await new Promise((r) => setTimeout(r, 300))
@@ -279,11 +248,8 @@ export async function startServer(modelPath, { contextSize = 32768, nGpuLayers =
   } catch {
     // no process on port — expected
   }
-  console.timeEnd('[PERF] killStaleOnPort')
 
-  console.time('[PERF] ensureBinary')
   const binary = await ensureBinary()
-  console.timeEnd('[PERF] ensureBinary')
 
   const args = [
     '-m',
@@ -346,11 +312,8 @@ export async function startServer(modelPath, { contextSize = 32768, nGpuLayers =
     _ready = false
   })
 
-  console.time('[PERF] waitForHealth')
   await waitForHealth()
-  console.timeEnd('[PERF] waitForHealth')
   _ready = true
-  console.timeEnd('[PERF] startServer total')
   logger.info('[llm.server] Server ready on port', _port)
 }
 
@@ -368,7 +331,7 @@ export async function stopServer() {
       try {
         proc.kill('SIGKILL')
       } catch {
-        /* expected */
+        /* already exited */
       }
       resolve()
     }, 5000)

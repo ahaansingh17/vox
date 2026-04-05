@@ -10,7 +10,7 @@ import { TERMINAL_STATUSES } from '../../activity/utils/task.utils'
 
 export const applySpawnResultEvent = (data, timestamp, setTasks, dequeuePendingSpawn) => {
   setTasks((current) => {
-    const taskId = String(data?.result?.taskId || '').trim()
+    const taskId = String(data?.result?.id || '').trim()
     if (!taskId) return current
 
     const existing =
@@ -41,7 +41,7 @@ export const applySpawnResultEvent = (data, timestamp, setTasks, dequeuePendingS
       taskId,
       {
         status: String(data?.result?.status || 'spawned'),
-        message: clipText(data?.result?.message, MAX_DETAIL_LENGTH),
+        error: clipText(data?.result?.error, MAX_DETAIL_LENGTH),
         spawnRequestedAt,
         spawnedAt: existing.spawnedAt || timestamp,
         spawnInstructions,

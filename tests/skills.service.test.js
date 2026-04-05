@@ -8,7 +8,7 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('../src/main/logger', () => ({
+vi.mock('../src/main/core/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
 }))
 

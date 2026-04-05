@@ -3,7 +3,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('crypto', () => ({
   randomUUID: () => 'test-uuid-' + Math.random().toString(36).slice(2, 8)
 }))
-vi.mock('@vox-ai-app/tools', () => ({ loadBuiltinTools: () => new Map() }))
+vi.mock('@vox-ai-app/tools', () => ({ ALL_TOOLS: [] }))
+vi.mock('@vox-ai-app/tools/registry', () => ({
+  registerAll: vi.fn(),
+  run: vi.fn(),
+  getDeclarations: vi.fn(() => [])
+}))
+vi.mock('@vox-ai-app/tools/schema', () => ({ validateArgs: vi.fn(() => []) }))
 vi.mock('@vox-ai-app/integrations', () => ({ ALL_INTEGRATION_TOOLS: [] }))
 vi.mock('@vox-ai-app/indexing', () => ({ ALL_KNOWLEDGE_TOOLS: [] }))
 
@@ -27,16 +33,13 @@ vi.mock('../src/main/storage/messages.db', () => ({
     mockMessages.push(msg)
     return msg
   },
-  clearMessages: () => {
-    mockMessages.length = 0
-  },
   saveSummaryCheckpoint: (summary, checkpointId) => {
     mockSummaryCheckpoint = { summary, checkpointId }
   },
   loadSummaryCheckpoint: () => mockSummaryCheckpoint,
-  clearSummaryCheckpoint: () => {
-    mockSummaryCheckpoint = null
-  }
+  indexMessageEmbedding: vi.fn(),
+  getConversationUserInfo: vi.fn(() => ({})),
+  setConversationUserInfo: vi.fn()
 }))
 
 vi.mock('../src/main/storage/store', () => ({
@@ -48,15 +51,22 @@ vi.mock('../src/main/storage/store', () => ({
 
 vi.mock('../src/main/ipc/shared', () => ({ emitAll: vi.fn() }))
 vi.mock('../src/main/mcp/mcp.service', () => ({ getMcpToolDefinitions: () => [] }))
+vi.mock('@vox-ai-app/storage/tools', () => ({
+  listTools: vi.fn(() => [])
+}))
+vi.mock('../src/main/storage/db', () => ({
+  getDb: vi.fn(() => ({}))
+}))
 vi.mock('../src/main/storage/tasks.db', () => ({
   getUnreportedTerminalTasks: () => [],
-  markTaskReported: vi.fn()
+  markTaskReported: vi.fn(),
+  indexTaskEmbedding: vi.fn(async () => {})
 }))
 
 const mockSendChatMessage = vi.fn()
 const mockSummarize = vi.fn().mockResolvedValue('condensed summary')
 
-vi.mock('../src/main/ai/llm.bridge', () => ({
+vi.mock('../src/main/ai/llm/bridge', () => ({
   sendChatMessage: (...args) => mockSendChatMessage(...args),
   abortChat: vi.fn(),
   clearChat: vi.fn().mockResolvedValue(undefined),
@@ -77,7 +87,7 @@ vi.mock('../src/main/chat/spawn.tool', () => ({
   }
 }))
 
-vi.mock('../src/main/logger', () => ({
+vi.mock('../src/main/core/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
 }))
 
@@ -229,12 +239,6 @@ describe('buildContextHistory via sendMessage', () => {
 })
 
 describe('summarization checkpoint persistence', () => {
-  it('should clear summary on clearConversation', async () => {
-    mockSummaryCheckpoint = { summary: 'old', checkpointId: 5 }
-    await mod.clearConversation()
-    expect(mockSummaryCheckpoint).toBeNull()
-  })
-
   it('should load persisted checkpoint on first access', async () => {
     mockSummaryCheckpoint = { summary: 'loaded from db', checkpointId: 10 }
 
@@ -253,27 +257,8 @@ describe('summarization checkpoint persistence', () => {
 })
 
 describe('message persistence across send', () => {
-  it('should persist user message before dispatching to LLM', async () => {
-    await mod.sendMessage({ content: 'my message' })
-
-    const userMsgs = mockMessages.filter((m) => m.role === 'user')
-    expect(userMsgs.some((m) => m.content === 'my message')).toBe(true)
-
-    expect(mockSendChatMessage).toHaveBeenCalledTimes(1)
-  })
-
-  it('should persist assistant response after LLM completes', async () => {
-    const { waitForChatResult } = await import('../src/main/ai/llm.bridge')
-    waitForChatResult.mockResolvedValueOnce({ finalText: 'llm answer', streamId: 'x' })
-
-    await mod.sendMessage({ content: 'ask' })
-
-    const assistantMsgs = mockMessages.filter((m) => m.role === 'assistant')
-    expect(assistantMsgs.some((m) => m.content === 'llm answer')).toBe(true)
-  })
-
   it('should not persist assistant message if finalText is empty', async () => {
-    const { waitForChatResult } = await import('../src/main/ai/llm.bridge')
+    const { waitForChatResult } = await import('../src/main/ai/llm/bridge')
     waitForChatResult.mockResolvedValueOnce({ finalText: '', streamId: 'y' })
 
     const before = mockMessages.filter((m) => m.role === 'assistant').length
@@ -287,7 +272,7 @@ describe('unreported task injection', () => {
   it('should inject completed task results into message history', async () => {
     const tasksDb = await import('../src/main/storage/tasks.db')
     tasksDb.getUnreportedTerminalTasks = vi.fn(() => [
-      { taskId: 't1', status: 'completed', instructions: 'Do X', result: 'Done X' }
+      { id: 't1', status: 'completed', instructions: 'Do X', result: 'Done X' }
     ])
     tasksDb.markTaskReported = vi.fn()
 

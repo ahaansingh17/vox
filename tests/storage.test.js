@@ -87,7 +87,7 @@ describeIfSqlite('storage/messages', () => {
       saveSummaryCheckpoint,
       loadSummaryCheckpoint,
       clearSummaryCheckpoint
-    } = await import('../packages/storage/src/messages.js'))
+    } = await import('../packages/storage/src/repos/messages.js'))
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'storage-msg-'))
     db = openDb(path.join(tmpDir, 'test.db'))
   })
@@ -141,7 +141,7 @@ describeIfSqlite('storage/messages', () => {
     saveSummaryCheckpoint(db, 'summary text', 42)
     const cp = loadSummaryCheckpoint(db)
     expect(cp.summary).toBe('summary text')
-    expect(cp.checkpointId).toBe(42)
+    expect(Number(cp.checkpointId)).toBe(42)
   })
 
   it('should clear summary checkpoint', () => {
@@ -155,62 +155,73 @@ describeIfSqlite('storage/messages', () => {
     ensureConversation(db)
     expect(loadSummaryCheckpoint(db)).toBeNull()
   })
+
+  it('should create messages_fts table in schema v3', () => {
+    const tables = db
+      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='messages_fts'`)
+      .all()
+    expect(tables.length).toBe(1)
+  })
+
+  it('should index and search messages via FTS', () => {
+    appendMessage(db, 'user', 'I work at Google in Mountain View')
+    const results = db
+      .prepare(
+        `SELECT message_id, content FROM messages_fts WHERE messages_fts MATCH '"Google"' LIMIT 5`
+      )
+      .all()
+    expect(results.length).toBe(1)
+    expect(results[0].content).toContain('Google')
+  })
 })
 
-describe('storage/config', () => {
-  let configGet, configSet, configDelete, configGetAll
-  let tmpDir, configPath
+describe('storage/settings', () => {
+  let openDb, closeDb, getSetting, getSettingJson, setSetting, deleteSetting, getAllSettings
+  let tmpDir, db
 
   beforeEach(async () => {
     vi.resetModules()
-    ;({ configGet, configSet, configDelete, configGetAll } =
-      await import('../packages/storage/src/config.js'))
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'storage-cfg-'))
-    configPath = path.join(tmpDir, 'config.json')
+    ;({ openDb, closeDb } = await import('../packages/storage/src/db.js'))
+    ;({ getSetting, getSettingJson, setSetting, deleteSetting, getAllSettings } =
+      await import('../packages/storage/src/repos/settings.js'))
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'storage-settings-'))
+    db = openDb(path.join(tmpDir, 'test.db'))
   })
 
   afterEach(() => {
+    try {
+      closeDb(path.join(tmpDir, 'test.db'))
+    } catch {
+      /* cleanup */
+    }
     fs.rmSync(tmpDir, { recursive: true, force: true })
   })
 
   it('should set and get a value', () => {
-    configSet(configPath, 'theme', 'dark')
-    expect(configGet(configPath, 'theme')).toBe('dark')
+    setSetting(db, 'theme', 'dark')
+    expect(getSetting(db, 'theme')).toBe('dark')
   })
 
   it('should return undefined for missing key', () => {
-    expect(configGet(configPath, 'nope')).toBeUndefined()
+    expect(getSetting(db, 'nope')).toBeUndefined()
   })
 
   it('should delete a key', () => {
-    configSet(configPath, 'key', 'val')
-    expect(configDelete(configPath, 'key')).toBe(true)
-    expect(configGet(configPath, 'key')).toBeUndefined()
+    setSetting(db, 'key', 'val')
+    deleteSetting(db, 'key')
+    expect(getSetting(db, 'key')).toBeUndefined()
   })
 
-  it('should return false when deleting non-existent key', () => {
-    expect(configDelete(configPath, 'nope')).toBe(false)
+  it('should get all settings', () => {
+    setSetting(db, 'a', JSON.stringify(1))
+    setSetting(db, 'b', JSON.stringify(2))
+    const all = getAllSettings(db)
+    expect(Object.keys(all)).toHaveLength(2)
   })
 
-  it('should get all config', () => {
-    configSet(configPath, 'a', 1)
-    configSet(configPath, 'b', 2)
-    const all = configGetAll(configPath)
-    expect(all.a).toBe(1)
-    expect(all.b).toBe(2)
-  })
-
-  it('should return empty object for missing file', () => {
-    expect(configGetAll(configPath)).toEqual({})
-  })
-
-  it('should handle complex values', () => {
-    configSet(configPath, 'nested', { foo: [1, 2, 3] })
-    expect(configGet(configPath, 'nested')).toEqual({ foo: [1, 2, 3] })
-  })
-
-  it('should throw for empty path', () => {
-    expect(() => configGet('', 'key')).toThrow('required')
+  it('should handle JSON values', () => {
+    setSetting(db, 'nested', JSON.stringify({ foo: [1, 2, 3] }))
+    expect(getSettingJson(db, 'nested')).toEqual({ foo: [1, 2, 3] })
   })
 })
 
@@ -222,7 +233,7 @@ describeIfSqlite('storage/tasks', () => {
   beforeEach(async () => {
     vi.resetModules()
     ;({ openDb, closeDb } = await import('../packages/storage/src/db.js'))
-    ;({ upsertTask, getTask, loadTasks } = await import('../packages/storage/src/tasks.js'))
+    ;({ upsertTask, getTask, loadTasks } = await import('../packages/storage/src/repos/tasks.js'))
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'storage-tasks-'))
     db = openDb(path.join(tmpDir, 'test.db'))
   })
@@ -237,17 +248,17 @@ describeIfSqlite('storage/tasks', () => {
   })
 
   it('should insert and retrieve a task', () => {
-    upsertTask(db, { taskId: 't1', instructions: 'Do stuff', status: 'queued' })
+    upsertTask(db, { id: 't1', instructions: 'Do stuff', status: 'queued' })
     const task = getTask(db, 't1')
     expect(task).not.toBeNull()
-    expect(task.taskId).toBe('t1')
+    expect(task.id).toBe('t1')
     expect(task.instructions).toBe('Do stuff')
     expect(task.status).toBe('queued')
   })
 
   it('should update existing task', () => {
-    upsertTask(db, { taskId: 't1', instructions: 'original', status: 'queued' })
-    upsertTask(db, { taskId: 't1', instructions: 'updated', status: 'running' })
+    upsertTask(db, { id: 't1', instructions: 'original', status: 'queued' })
+    upsertTask(db, { id: 't1', instructions: 'updated', status: 'running' })
     const task = getTask(db, 't1')
     expect(task.instructions).toBe('updated')
     expect(task.status).toBe('running')
@@ -258,13 +269,13 @@ describeIfSqlite('storage/tasks', () => {
   })
 
   it('should load all tasks', () => {
-    upsertTask(db, { taskId: 't1', instructions: 'a', status: 'queued' })
-    upsertTask(db, { taskId: 't2', instructions: 'b', status: 'running' })
+    upsertTask(db, { id: 't1', instructions: 'a', status: 'queued' })
+    upsertTask(db, { id: 't2', instructions: 'b', status: 'running' })
     const tasks = loadTasks(db)
     expect(tasks).toHaveLength(2)
   })
 
-  it('should throw for missing taskId', () => {
-    expect(() => upsertTask(db, { instructions: 'no id' })).toThrow('taskId is required')
+  it('should throw for missing id', () => {
+    expect(() => upsertTask(db, { instructions: 'no id' })).toThrow('id is required')
   })
 })

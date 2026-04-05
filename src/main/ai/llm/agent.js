@@ -1,5 +1,5 @@
-import { emitAll } from '../ipc/shared'
-import { executeElectronTool } from './llm.tool-executor.js'
+import { emitAll } from '../../ipc/shared'
+import { executeElectronTool } from './tool-executor.js'
 
 const agentListeners = new Map()
 const agentControllers = new Map()
@@ -12,7 +12,7 @@ export function startAgent({ taskId, instructions, context, toolDefinitions, sum
 
 async function runAgent({ taskId, instructions, context, toolDefinitions, summarizeFn }) {
   const { runAgentLoop, buildAgentPrompt, fetchPastContext, fetchKnowledgePatterns } =
-    await import('../chat/agent/agent.runner.js')
+    await import('../../chat/agent/agent.runner.js')
 
   const controller = new AbortController()
   agentControllers.set(taskId, controller)
@@ -57,7 +57,7 @@ async function runAgent({ taskId, instructions, context, toolDefinitions, summar
     })
 
     if (journal) {
-      const { recordBlockerPatterns } = await import('../chat/agent/agent.runner.js')
+      const { recordBlockerPatterns } = await import('../../chat/agent/agent.runner.js')
       await recordBlockerPatterns(journal).catch(() => {})
     }
 

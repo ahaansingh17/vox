@@ -27,9 +27,16 @@ function LeftRail({ activeRoute, collapsed, onRouteChange, onToggleCollapse }) {
   const [installing, setInstalling] = useState(false)
 
   useEffect(() => {
-    const unsub1 = window.api.updater.onAvailable(({ version }) => setUpdateReady({ version, downloaded: false }))
-    const unsub2 = window.api.updater.onDownloaded(({ version }) => setUpdateReady({ version, downloaded: true }))
-    return () => { unsub1(); unsub2() }
+    const unsub1 = window.api.updater.onAvailable(({ version }) =>
+      setUpdateReady({ version, downloaded: false })
+    )
+    const unsub2 = window.api.updater.onDownloaded(({ version }) =>
+      setUpdateReady({ version, downloaded: true })
+    )
+    return () => {
+      unsub1()
+      unsub2()
+    }
   }, [])
 
   const handleInstall = useCallback(() => {
@@ -76,15 +83,17 @@ function LeftRail({ activeRoute, collapsed, onRouteChange, onToggleCollapse }) {
           className="update-sidebar-btn"
           disabled={installing || !updateReady.downloaded}
           onClick={handleInstall}
-          title={updateReady.downloaded ? `Install v${updateReady.version} and restart` : `Downloading v${updateReady.version}...`}
+          title={
+            updateReady.downloaded
+              ? `Install v${updateReady.version} and restart`
+              : `Downloading v${updateReady.version}...`
+          }
           type="button"
         >
           <ArrowDownCircle size={16} />
           {!collapsed && (
             <span>
-              {updateReady.downloaded
-                ? `Update to v${updateReady.version}`
-                : 'Downloading...'}
+              {updateReady.downloaded ? `Update to v${updateReady.version}` : 'Downloading...'}
             </span>
           )}
         </button>

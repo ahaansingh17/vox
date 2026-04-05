@@ -35,7 +35,7 @@ function ExpandChevron({ expanded, size }) {
   return <ChevronRight size={size} />
 }
 
-function ExecuteCodeDetails({ argsObj, rawResult }) {
+function ExecuteCodeDetails({ argsObj, result: rawResult }) {
   const commands = Array.isArray(argsObj?.commands) ? argsObj.commands : []
   const r = rawResult && typeof rawResult === 'object' ? rawResult : null
   const stdout = String(r?.stdout || '').trim()
@@ -71,7 +71,7 @@ function ExecuteCodeDetails({ argsObj, rawResult }) {
   )
 }
 
-function GenericDetails({ argEntries, rawResult }) {
+function GenericDetails({ argEntries, result: rawResult }) {
   const resultStr =
     rawResult != null ? (typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult)) : ''
   return (
@@ -127,15 +127,15 @@ export const ActionItem = memo(function ActionItem({ call, result, isLast, repea
         })()
       : null)
 
-  const rawResult = call?.type === 'task.request' ? null : result?.rawResult
-  const outcome = getOutcomeBadge(toolName, rawResult)
+  const toolResult = call?.type === 'task.request' ? null : result?.result
+  const outcome = getOutcomeBadge(toolName, toolResult)
   const isFailure = outcome?.type === 'error' || outcome?.type === 'timeout'
   const hasDetails = isExecute
     ? true
     : argEntries.length > (primaryEntry ? 1 : 0) ||
-      (rawResult != null && typeof rawResult === 'string'
-        ? rawResult
-        : JSON.stringify(rawResult ?? ''))
+      (toolResult != null && typeof toolResult === 'string'
+        ? toolResult
+        : JSON.stringify(toolResult ?? ''))
 
   return (
     <div
@@ -192,9 +192,9 @@ export const ActionItem = memo(function ActionItem({ call, result, isLast, repea
         {sub && !expanded && <p className="activity-timeline-sub">{sub}</p>}
         {expanded &&
           (isExecute ? (
-            <ExecuteCodeDetails argsObj={argsObj} rawResult={rawResult} />
+            <ExecuteCodeDetails argsObj={argsObj} result={toolResult} />
           ) : (
-            <GenericDetails argEntries={argEntries} rawResult={rawResult} />
+            <GenericDetails argEntries={argEntries} result={toolResult} />
           ))}
       </div>
     </div>

@@ -1,14 +1,16 @@
 import { emitAll } from '../ipc/shared'
 import { sendMessage, abort as abortLlm } from '../chat/chat.session'
 import { feedAudio, setOnTranscript, setOnHearing, resetBuffers, destroyStt } from './stt.service'
-import { setChatStreamHandlers, clearChatStreamHandlers } from '../ai/llm.bridge'
-import { logger } from '../logger'
+import { setChatStreamHandlers, clearChatStreamHandlers } from '../ai/llm/bridge'
+import { logger } from '../core/logger'
 
 let active = false
 let aborted = false
 let processing = false
 let pendingTranscript = null
 let _processLock = false
+let _bargeInTimer = null
+const BARGE_IN_DELAY_MS = 150
 
 const SENTENCE_END = /[.!?]["']?\s*$/
 
@@ -50,13 +52,18 @@ export function initVoiceOrchestrator() {
   setOnTranscript(handleTranscript)
   setOnHearing(() => {
     if (!active) return
-    if (processing) {
-      aborted = true
-      abortLlm()
-      emitAll('chat:event', { type: 'barge_in', data: {} })
-      logger.info('[voice] Barge-in on hearing — aborting current response')
-    }
     emitAll('chat:event', { type: 'hearing', data: {} })
+    if (processing && !_bargeInTimer) {
+      _bargeInTimer = setTimeout(() => {
+        _bargeInTimer = null
+        if (processing && active) {
+          aborted = true
+          abortLlm()
+          emitAll('chat:event', { type: 'barge_in', data: {} })
+          logger.info('[voice] Barge-in on hearing — aborting current response')
+        }
+      }, BARGE_IN_DELAY_MS)
+    }
   })
 }
 
@@ -75,6 +82,10 @@ export function deactivateVoiceMode() {
   processing = false
   pendingTranscript = null
   _processLock = false
+  if (_bargeInTimer) {
+    clearTimeout(_bargeInTimer)
+    _bargeInTimer = null
+  }
   clearChatStreamHandlers()
   resetBuffers()
 }

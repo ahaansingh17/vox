@@ -76,7 +76,9 @@ const api = {
     onRestarting: (listener) => subscribeToRendererEvent('models:restarting', listener),
     getDownloads: () => invoke('models:get-downloads'),
     onEngineStatus: (listener) => subscribeToRendererEvent('engine:status', listener),
-    onEngineProgress: (listener) => subscribeToRendererEvent('engine:progress', listener)
+    onEngineProgress: (listener) => subscribeToRendererEvent('engine:progress', listener),
+    onEmbedStatus: (listener) => subscribeToRendererEvent('models:embed-status', listener),
+    onEmbedProgress: (listener) => subscribeToRendererEvent('models:embed-progress', listener)
   },
 
   indexing: {
@@ -104,7 +106,7 @@ const api = {
   },
 
   store: {
-    get: (key) => invoke('store:get', { key }).then((r) => r?.value ?? null),
+    get: (key) => invoke('store:get', { key }).then((r) => r.value),
     set: (key, value) => invoke('store:set', { key, value }),
     delete: (key) => invoke('store:delete', { key })
   },
@@ -118,20 +120,6 @@ const api = {
     hide: () => invoke('overlay:hide'),
     captureRegion: () => invoke('overlay:capture-region'),
     setIgnoreMouseEvents: (ignore) => electronAPI.ipcRenderer.send('overlay:mouse-ignore', ignore)
-  },
-
-  channels: {
-    list: () => invoke('channels:list'),
-    init: (channelId, config) => invoke('channels:init', { channelId, config }),
-    disconnect: (channelId) => invoke('channels:disconnect', { channelId }),
-    send: (channelId, peerId, text, opts) =>
-      invoke('channels:send', { channelId, peerId, text, opts }),
-    destroyAll: () => invoke('channels:destroy-all'),
-    getActivity: (limit) => invoke('channels:get-activity', { limit }),
-    getThread: (channel, peerId) => invoke('channels:get-thread', { channel, peerId }),
-    onStatus: (listener) => subscribeToRendererEvent('channels:status', listener),
-    onQR: (listener) => subscribeToRendererEvent('channels:qr', listener),
-    onActivity: (listener) => subscribeToRendererEvent('channels:activity', listener)
   },
 
   imessage: {
@@ -148,9 +136,20 @@ const api = {
   },
 
   updater: {
-    install: () => invoke('update:install'),
     onAvailable: (listener) => subscribeToRendererEvent('update:available', listener),
-    onDownloaded: (listener) => subscribeToRendererEvent('update:downloaded', listener)
+    onDownloaded: (listener) => subscribeToRendererEvent('update:downloaded', listener),
+    install: () => invoke('update:install')
+  },
+
+  channels: {
+    list: () => invoke('channels:list'),
+    init: (channelId, config) => invoke('channels:init', { channelId, config }),
+    disconnect: (channelId) => invoke('channels:disconnect', { channelId }),
+    getActivity: (limit) => invoke('channels:get-activity', { limit }),
+    getThread: (channel, peerId) => invoke('channels:get-thread', { channel, peerId }),
+    onStatus: (listener) => subscribeToRendererEvent('channels:status', listener),
+    onQR: (listener) => subscribeToRendererEvent('channels:qr', listener),
+    onActivity: (listener) => subscribeToRendererEvent('channels:activity', listener)
   }
 }
 

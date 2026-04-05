@@ -32,7 +32,7 @@ vi.mock('../src/main/voice/stt.service', () => ({
   destroyStt: (...args) => mockDestroyStt(...args)
 }))
 
-vi.mock('../src/main/ai/llm.bridge', () => ({
+vi.mock('../src/main/ai/llm/bridge', () => ({
   setChatStreamHandlers: (...args) => {
     mockSetChatStreamHandlers(...args)
     if (args[1]) {
@@ -42,7 +42,7 @@ vi.mock('../src/main/ai/llm.bridge', () => ({
   clearChatStreamHandlers: (...args) => mockClearChatStreamHandlers(...args)
 }))
 
-vi.mock('../src/main/logger', () => ({
+vi.mock('../src/main/core/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
 }))
 

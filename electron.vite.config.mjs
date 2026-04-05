@@ -23,6 +23,7 @@ export default defineConfig({
         input: {
           index: resolve('src/main/index.js'),
           'stt.worker': resolve('src/main/voice/stt.worker.js'),
+          'embed.worker': resolve('src/main/ai/embeddings/worker.js'),
           'voice.worker': require.resolve('@vox-ai-app/voice/worker'),
           'indexing.parser.worker': require.resolve('@vox-ai-app/indexing/parser/worker'),
           'indexing.process': require.resolve('@vox-ai-app/indexing/process/entry')

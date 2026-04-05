@@ -1,6 +1,43 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+const mockToolStore = []
+
+function normToCamel(t) {
+  return {
+    id: t.id || `tool-${Math.random().toString(36).slice(2)}`,
+    name: t.name,
+    description: t.description || '',
+    parameters: t.parameters || { type: 'object', properties: {} },
+    sourceType: t.source_type || t.sourceType || 'js_function',
+    sourceCode: t.source_code || t.sourceCode || '',
+    webhookUrl: t.webhook_url || t.webhookUrl || '',
+    webhookHeaders: t.webhook_headers || t.webhookHeaders || null,
+    tags: t.tags || [],
+    isEnabled:
+      t.is_enabled !== undefined ? t.is_enabled : t.isEnabled !== undefined ? t.isEnabled : true,
+    createdAt: t.created_at || t.createdAt || new Date().toISOString(),
+    updatedAt: t.updated_at || t.updatedAt || new Date().toISOString()
+  }
+}
+
+function normToSnake(t) {
+  return {
+    id: t.id,
+    name: t.name,
+    description: t.description || '',
+    parameters: t.parameters,
+    source_type: t.sourceType || t.source_type || 'js_function',
+    source_code: t.sourceCode || t.source_code || '',
+    webhook_url: t.webhookUrl || t.webhook_url || '',
+    tags: t.tags || [],
+    is_enabled: t.isEnabled !== undefined ? t.isEnabled : true,
+    created_at: t.createdAt || t.created_at || '',
+    updated_at: t.updatedAt || t.updated_at || ''
+  }
+}
+
 vi.mock('electron', () => ({
+  app: { getPath: () => '/tmp/vox-test' },
   dialog: {
     showOpenDialog: vi.fn().mockResolvedValue({ canceled: false, filePaths: ['/test/file.txt'] })
   }
@@ -9,13 +46,22 @@ vi.mock('electron', () => ({
 vi.mock('../src/main/storage/store', () => {
   const store = {}
   return {
-    storeGet: (key) => store[key] ?? null,
+    storeGet: (key) => {
+      if (key === 'customTools') return mockToolStore.map(normToSnake)
+      return store[key] ?? null
+    },
     storeSet: (key, val) => {
+      if (key === 'customTools') {
+        mockToolStore.length = 0
+        if (Array.isArray(val)) val.forEach((t) => mockToolStore.push(normToCamel(t)))
+        return
+      }
       store[key] = val
     },
     _store: store,
     _reset: () => {
       for (const k of Object.keys(store)) delete store[k]
+      mockToolStore.length = 0
     }
   }
 })
@@ -91,47 +137,104 @@ vi.mock('../src/main/chat/task.queue', () => ({
 }))
 
 vi.mock('../src/main/chat/chat.session', () => ({
-  getToolDefinitions: () => []
+  getToolDefinitions: () => [],
+  invalidateToolDefinitions: vi.fn()
 }))
 
 vi.mock('../src/main/storage/tasks.db', () => ({
-  searchTasksFts: vi.fn(() => [])
+  searchTasksFts: vi.fn(() => []),
+  searchTasksSemantic: vi.fn(async () => [])
 }))
 
-const _schedules = new Map()
-vi.mock('../src/main/scheduler.service', () => ({
-  addSchedule: vi.fn((config) => {
-    const id = config.id || `sched_${Date.now()}`
-    const s = {
-      id,
-      expr: config.expr,
-      tz: config.tz || null,
-      prompt: config.prompt,
-      channel: config.channel || null,
-      enabled: config.enabled !== false,
-      once: config.once === true
+vi.mock('../src/main/storage/tasks.db.js', () => ({
+  searchTasksFts: vi.fn(() => []),
+  searchTasksSemantic: vi.fn(async () => [])
+}))
+
+vi.mock('../src/main/storage/messages.db', () => {
+  let userInfo = {}
+  return {
+    searchMessagesSemantic: vi.fn(async () => [
+      { id: 'm1', role: 'user', content: 'I live in NYC', score: 0.85 },
+      { id: 'm2', role: 'assistant', content: 'Got it, you are in New York City', score: 0.7 }
+    ]),
+    searchMessagesFts: vi.fn(() => []),
+    getConversationUserInfo: vi.fn(() => ({ ...userInfo })),
+    setConversationUserInfo: vi.fn((data) => {
+      userInfo = { ...data }
+    }),
+    _resetUserInfo: () => {
+      userInfo = {}
     }
-    _schedules.set(id, s)
-    return s
+  }
+})
+
+vi.mock('../src/main/storage/messages.db.js', () => {
+  let userInfo = {}
+  return {
+    searchMessagesSemantic: vi.fn(async () => [
+      { id: 'm1', role: 'user', content: 'I live in NYC', score: 0.85 },
+      { id: 'm2', role: 'assistant', content: 'Got it, you are in New York City', score: 0.7 }
+    ]),
+    searchMessagesFts: vi.fn(() => []),
+    getConversationUserInfo: vi.fn(() => ({ ...userInfo })),
+    setConversationUserInfo: vi.fn((data) => {
+      userInfo = { ...data }
+    }),
+    _resetUserInfo: () => {
+      userInfo = {}
+    }
+  }
+})
+
+vi.mock('@vox-ai-app/storage/tools', () => ({
+  listTools: vi.fn((db, enabledOnly) => {
+    if (enabledOnly) return mockToolStore.filter((t) => t.isEnabled !== false)
+    return [...mockToolStore]
   }),
-  removeSchedule: vi.fn((id) => {
-    _schedules.delete(id)
+  getToolByName: vi.fn((db, name) => mockToolStore.find((t) => t.name === name) || null),
+  createTool: vi.fn((db, tool) => {
+    const newTool = {
+      id: `tool-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      ...tool,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+    mockToolStore.push(newTool)
+    return newTool
   }),
-  getSchedules: vi.fn(() =>
-    [..._schedules.values()].map((s) => ({ ...s, nextRun: Date.now() + 3600000 }))
-  )
+  updateTool: vi.fn((db, id, updates) => {
+    const idx = mockToolStore.findIndex((t) => t.id === id)
+    if (idx < 0) return null
+    mockToolStore[idx] = { ...mockToolStore[idx], ...updates, updatedAt: new Date().toISOString() }
+    return mockToolStore[idx]
+  }),
+  deleteTool: vi.fn((db, id) => {
+    const idx = mockToolStore.findIndex((t) => t.id === id)
+    if (idx >= 0) mockToolStore.splice(idx, 1)
+  }),
+  getTool: vi.fn((db, id) => mockToolStore.find((t) => t.id === id) || null)
 }))
 
-vi.mock('../src/main/logger', () => ({
+vi.mock('../src/main/storage/db', () => ({
+  getDb: vi.fn(() => ({}))
+}))
+
+vi.mock('../src/main/storage/db.js', () => ({
+  getDb: vi.fn(() => ({}))
+}))
+
+vi.mock('../src/main/core/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
 }))
 
-const { executeElectronTool } = await import('../src/main/ai/llm.tool-executor.js')
+const { executeElectronTool } = await import('../src/main/ai/llm/tool-executor.js')
 const storeMod = await import('../src/main/storage/store')
 
-beforeEach(() => {
+beforeEach(async () => {
   storeMod._reset()
-  _schedules.clear()
+  const msgDb = await import('../src/main/storage/messages.db.js')
+  if (msgDb._resetUserInfo) msgDb._resetUserInfo()
 })
 
 describe('executeElectronTool - file dialogs', () => {
@@ -169,7 +272,8 @@ describe('executeElectronTool - save_user_info', () => {
   it('should accumulate user info across calls', async () => {
     await executeElectronTool('save_user_info', { info_key: 'name', info_value: 'Alice' })
     await executeElectronTool('save_user_info', { info_key: 'age', info_value: '30' })
-    const stored = storeMod.storeGet('vox.user.info')
+    const { getConversationUserInfo } = await import('../src/main/storage/messages.db.js')
+    const stored = getConversationUserInfo()
     expect(stored.name).toBe('Alice')
     expect(stored.age).toBe('30')
   })
@@ -183,10 +287,11 @@ describe('executeElectronTool - save_user_info', () => {
 
 describe('executeElectronTool - spawn_task', () => {
   it('should spawn a task and return taskId', async () => {
-    const result = await executeElectronTool('spawn_task', { instructions: 'Do something' })
-    const parsed = JSON.parse(result)
+    const output = await executeElectronTool('spawn_task', { instructions: 'Do something' })
+    expect(output.endTurn).toBe(true)
+    const parsed = JSON.parse(output.result)
     expect(parsed.status).toBe('spawned')
-    expect(parsed.taskId).toBeDefined()
+    expect(parsed.id).toBeDefined()
   })
 
   it('should wait for result when waitForResult is true', async () => {
@@ -217,6 +322,35 @@ describe('executeElectronTool - task queries', () => {
     const result = await executeElectronTool('search_tasks', { status: 'completed' })
     const parsed = JSON.parse(result)
     expect(parsed.tasks).toBeDefined()
+  })
+})
+
+describe('executeElectronTool - search_messages', () => {
+  it('should search messages semantically', async () => {
+    const result = await executeElectronTool('search_messages', { query: 'where do I live' })
+    const parsed = JSON.parse(result)
+    expect(parsed.messages).toBeDefined()
+    expect(parsed.messages.length).toBe(2)
+    expect(parsed.messages[0].content).toContain('NYC')
+    expect(parsed.count).toBe(2)
+  })
+
+  it('should return error when query is empty', async () => {
+    const result = await executeElectronTool('search_messages', { query: '' })
+    const parsed = JSON.parse(result)
+    expect(parsed.error).toBe('query is required')
+  })
+
+  it('should return error when query is missing', async () => {
+    const result = await executeElectronTool('search_messages', {})
+    const parsed = JSON.parse(result)
+    expect(parsed.error).toBe('query is required')
+  })
+
+  it('should pass custom limit', async () => {
+    const { searchMessagesSemantic } = await import('../src/main/storage/messages.db')
+    await executeElectronTool('search_messages', { query: 'test', limit: 5 })
+    expect(searchMessagesSemantic).toHaveBeenCalledWith('test', 5)
   })
 })
 
@@ -373,165 +507,6 @@ describe('executeElectronTool - find_tools and run_tool', () => {
   })
 })
 
-describe('executeElectronTool - schedule_task', () => {
-  it('should schedule a task with valid cron', async () => {
-    const result = JSON.parse(
-      await executeElectronTool('schedule_task', {
-        instructions: 'Check email',
-        cron_expression: '0 9 * * *'
-      })
-    )
-    expect(result.scheduled).toBe(true)
-    expect(result.schedule_id).toBeDefined()
-    expect(result.cron_expression).toBe('0 9 * * *')
-    expect(result.instructions).toBe('Check email')
-    expect(result.note).toContain('Vox is open')
-  })
-
-  it('should pass timezone through', async () => {
-    const result = JSON.parse(
-      await executeElectronTool('schedule_task', {
-        instructions: 'Morning brief',
-        cron_expression: '0 8 * * 1-5',
-        timezone: 'America/New_York'
-      })
-    )
-    expect(result.scheduled).toBe(true)
-    expect(result.timezone).toBe('America/New_York')
-  })
-
-  it('should set once flag', async () => {
-    const result = JSON.parse(
-      await executeElectronTool('schedule_task', {
-        instructions: 'One-time reminder',
-        cron_expression: '30 14 * * *',
-        once: true
-      })
-    )
-    expect(result.once).toBe(true)
-  })
-
-  it('should reject empty cron expression', async () => {
-    const result = JSON.parse(
-      await executeElectronTool('schedule_task', {
-        instructions: 'Test',
-        cron_expression: ''
-      })
-    )
-    expect(result.error).toContain('cron_expression is required')
-  })
-
-  it('should reject empty instructions', async () => {
-    const result = JSON.parse(
-      await executeElectronTool('schedule_task', {
-        instructions: '',
-        cron_expression: '0 9 * * *'
-      })
-    )
-    expect(result.error).toContain('instructions is required')
-  })
-
-  it('should reject invalid cron with wrong field count', async () => {
-    const result = JSON.parse(
-      await executeElectronTool('schedule_task', {
-        instructions: 'Test',
-        cron_expression: '0 9 *'
-      })
-    )
-    expect(result.error).toContain('Invalid cron')
-  })
-
-  it('should reject bare * minute field (every-minute)', async () => {
-    const result = JSON.parse(
-      await executeElectronTool('schedule_task', {
-        instructions: 'Spam',
-        cron_expression: '* * * * *'
-      })
-    )
-    expect(result.error).toContain('Minimum interval')
-  })
-
-  it('should reject */1 minute interval', async () => {
-    const result = JSON.parse(
-      await executeElectronTool('schedule_task', {
-        instructions: 'Spam',
-        cron_expression: '*/1 * * * *'
-      })
-    )
-    expect(result.error).toContain('Minimum interval')
-  })
-
-  it('should accept */5 minute interval', async () => {
-    const result = JSON.parse(
-      await executeElectronTool('schedule_task', {
-        instructions: 'Frequent check',
-        cron_expression: '*/5 * * * *'
-      })
-    )
-    expect(result.scheduled).toBe(true)
-  })
-
-  it('should reject */3 minute interval', async () => {
-    const result = JSON.parse(
-      await executeElectronTool('schedule_task', {
-        instructions: 'Too fast',
-        cron_expression: '*/3 * * * *'
-      })
-    )
-    expect(result.error).toContain('Minimum interval')
-  })
-})
-
-describe('executeElectronTool - list_schedules', () => {
-  it('should return empty list when no schedules', async () => {
-    const result = JSON.parse(await executeElectronTool('list_schedules', {}))
-    expect(result.schedules).toEqual([])
-    expect(result.count).toBe(0)
-  })
-
-  it('should return schedules after scheduling', async () => {
-    await executeElectronTool('schedule_task', {
-      instructions: 'Daily check',
-      cron_expression: '0 10 * * *'
-    })
-    const result = JSON.parse(await executeElectronTool('list_schedules', {}))
-    expect(result.count).toBe(1)
-    expect(result.schedules[0].instructions).toBe('Daily check')
-    expect(result.schedules[0].cron_expression).toBe('0 10 * * *')
-    expect(result.schedules[0].next_run).toBeDefined()
-  })
-})
-
-describe('executeElectronTool - remove_schedule', () => {
-  it('should remove an existing schedule', async () => {
-    const created = JSON.parse(
-      await executeElectronTool('schedule_task', {
-        instructions: 'To remove',
-        cron_expression: '0 12 * * *'
-      })
-    )
-    const result = JSON.parse(
-      await executeElectronTool('remove_schedule', { schedule_id: created.schedule_id })
-    )
-    expect(result.removed).toBe(true)
-    expect(result.schedule_id).toBe(created.schedule_id)
-    const list = JSON.parse(await executeElectronTool('list_schedules', {}))
-    expect(list.count).toBe(0)
-  })
-
-  it('should error for empty schedule_id', async () => {
-    const result = JSON.parse(await executeElectronTool('remove_schedule', { schedule_id: '' }))
-    expect(result.error).toContain('schedule_id is required')
-  })
-
-  it('should error for non-existent schedule', async () => {
-    const result = JSON.parse(
-      await executeElectronTool('remove_schedule', { schedule_id: 'not_real' })
-    )
-    expect(result.error).toContain('not found')
-  })
-})
-
 describe('executeElectronTool - builtin tools routing', () => {
   it('should route run_local_command to builtin registry', async () => {
     const result = await executeElectronTool('run_local_command', { command: 'echo hello' })
@@ -626,5 +601,397 @@ describe('SAFE_MODULES whitelist', () => {
     await expect(executeElectronTool('run_tool', { name: 'mod_test', args: {} })).rejects.toThrow(
       'not allowed'
     )
+  })
+})
+
+describe('validateArgs via run_tool', () => {
+  it('should reject missing required fields', async () => {
+    storeMod.storeSet('customTools', [
+      {
+        name: 'strict_tool',
+        source_type: 'js_function',
+        is_enabled: true,
+        source_code: 'return args.x',
+        parameters: {
+          type: 'object',
+          properties: { x: { type: 'number' }, y: { type: 'string' } },
+          required: ['x', 'y']
+        }
+      }
+    ])
+    const result = JSON.parse(
+      await executeElectronTool('run_tool', { name: 'strict_tool', args: { x: 1 } })
+    )
+    expect(result.error).toBe('invalid_args')
+    expect(result.issues).toContain('"y" is required')
+    expect(result.schema).toBeDefined()
+    expect(result.schema.properties.x.type).toBe('number')
+  })
+
+  it('should reject wrong types', async () => {
+    storeMod.storeSet('customTools', [
+      {
+        name: 'typed_tool',
+        source_type: 'js_function',
+        is_enabled: true,
+        source_code: 'return args.count',
+        parameters: {
+          type: 'object',
+          properties: { count: { type: 'number' } },
+          required: []
+        }
+      }
+    ])
+    const result = JSON.parse(
+      await executeElectronTool('run_tool', { name: 'typed_tool', args: { count: 'five' } })
+    )
+    expect(result.error).toBe('invalid_args')
+    expect(result.issues[0]).toContain('must be number')
+  })
+
+  it('should pass validation for correct args', async () => {
+    storeMod.storeSet('customTools', [
+      {
+        name: 'valid_tool',
+        source_type: 'js_function',
+        is_enabled: true,
+        source_code: 'return { sum: args.a + args.b }',
+        parameters: {
+          type: 'object',
+          properties: { a: { type: 'number' }, b: { type: 'number' } },
+          required: ['a', 'b']
+        }
+      }
+    ])
+    const result = JSON.parse(
+      await executeElectronTool('run_tool', { name: 'valid_tool', args: { a: 2, b: 3 } })
+    )
+    expect(result.sum).toBe(5)
+  })
+
+  it('should skip validation when tool has no parameters schema', async () => {
+    storeMod.storeSet('customTools', [
+      {
+        name: 'no_schema',
+        source_type: 'js_function',
+        is_enabled: true,
+        source_code: 'return "ok"'
+      }
+    ])
+    const result = await executeElectronTool('run_tool', {
+      name: 'no_schema',
+      args: { anything: true }
+    })
+    expect(result).toBe('ok')
+  })
+
+  it('should return full schema in validation error for self-correction', async () => {
+    storeMod.storeSet('customTools', [
+      {
+        name: 'schema_return',
+        source_type: 'js_function',
+        is_enabled: true,
+        source_code: 'return 1',
+        parameters: {
+          type: 'object',
+          properties: { url: { type: 'string', description: 'Target URL' } },
+          required: ['url']
+        }
+      }
+    ])
+    const result = JSON.parse(
+      await executeElectronTool('run_tool', { name: 'schema_return', args: {} })
+    )
+    expect(result.error).toBe('invalid_args')
+    expect(result.schema.properties.url.description).toBe('Target URL')
+  })
+
+  it('should detect array type correctly', async () => {
+    storeMod.storeSet('customTools', [
+      {
+        name: 'array_tool',
+        source_type: 'js_function',
+        is_enabled: true,
+        source_code: 'return args.items.length',
+        parameters: {
+          type: 'object',
+          properties: { items: { type: 'string' } },
+          required: ['items']
+        }
+      }
+    ])
+    const result = JSON.parse(
+      await executeElectronTool('run_tool', { name: 'array_tool', args: { items: ['a', 'b'] } })
+    )
+    expect(result.error).toBe('invalid_args')
+    expect(result.issues[0]).toContain('must be string, got array')
+  })
+})
+
+describe('fuzzy find_tools', () => {
+  beforeEach(() => {
+    storeMod.storeSet('customTools', [
+      {
+        name: 'weather_api',
+        description: 'Get current weather for a city',
+        source_type: 'http_webhook',
+        is_enabled: true
+      },
+      {
+        name: 'send_email',
+        description: 'Send an email to a recipient',
+        source_type: 'js_function',
+        is_enabled: true
+      },
+      {
+        name: 'math_calculator',
+        description: 'Perform arithmetic operations',
+        source_type: 'js_function',
+        is_enabled: true
+      },
+      {
+        name: 'file_converter',
+        description: 'Convert files between formats',
+        source_type: 'desktop',
+        is_enabled: true
+      }
+    ])
+  })
+
+  it('should rank exact name token match highest', async () => {
+    const result = JSON.parse(await executeElectronTool('find_tools', { query: 'weather' }))
+    expect(result.tools[0].name).toBe('weather_api')
+  })
+
+  it('should match partial tokens in name', async () => {
+    const result = JSON.parse(await executeElectronTool('find_tools', { query: 'mail' }))
+    expect(result.tools.length).toBeGreaterThanOrEqual(1)
+    expect(result.tools[0].name).toBe('send_email')
+  })
+
+  it('should match description tokens', async () => {
+    const result = JSON.parse(await executeElectronTool('find_tools', { query: 'arithmetic' }))
+    expect(result.tools.length).toBeGreaterThanOrEqual(1)
+    expect(result.tools[0].name).toBe('math_calculator')
+  })
+
+  it('should return empty when no tokens match', async () => {
+    const result = JSON.parse(await executeElectronTool('find_tools', { query: 'unknown' }))
+    expect(result.tools.length).toBe(0)
+  })
+
+  it('should handle multi-word queries', async () => {
+    const result = JSON.parse(
+      await executeElectronTool('find_tools', { query: 'convert file format' })
+    )
+    expect(result.tools[0].name).toBe('file_converter')
+  })
+
+  it('should include id field in results', async () => {
+    const result = JSON.parse(await executeElectronTool('find_tools', { query: 'weather' }))
+    expect(result.tools[0].id).toBeDefined()
+  })
+
+  it('should sort by relevance score descending', async () => {
+    const result = JSON.parse(
+      await executeElectronTool('find_tools', { query: 'send email recipient' })
+    )
+    expect(result.tools[0].name).toBe('send_email')
+  })
+})
+
+describe('manage_tool', () => {
+  it('should create a new tool', async () => {
+    storeMod.storeSet('customTools', [])
+    const result = JSON.parse(
+      await executeElectronTool('manage_tool', {
+        action: 'create',
+        name: 'my_new_tool',
+        description: 'Does something',
+        source_type: 'js_function',
+        source_code: 'return "hello"'
+      })
+    )
+    expect(result.ok).toBe(true)
+    expect(result.tool.name).toBe('my_new_tool')
+    expect(result.tool.id).toBeDefined()
+    expect(result.tool.isEnabled).toBe(true)
+    expect(result.tool.createdAt).toBeDefined()
+  })
+
+  it('should persist created tool to store', async () => {
+    storeMod.storeSet('customTools', [])
+    await executeElectronTool('manage_tool', {
+      action: 'create',
+      name: 'persisted_tool',
+      description: 'test',
+      source_type: 'js_function',
+      source_code: 'return 1'
+    })
+    const tools = storeMod.storeGet('customTools')
+    expect(tools.length).toBe(1)
+    expect(tools[0].name).toBe('persisted_tool')
+  })
+
+  it('should reject duplicate tool names on create', async () => {
+    storeMod.storeSet('customTools', [{ name: 'existing', id: 'e1' }])
+    const result = JSON.parse(
+      await executeElectronTool('manage_tool', {
+        action: 'create',
+        name: 'existing'
+      })
+    )
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain('already exists')
+  })
+
+  it('should require name for create', async () => {
+    const result = JSON.parse(await executeElectronTool('manage_tool', { action: 'create' }))
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain('name is required')
+  })
+
+  it('should update tool by id', async () => {
+    storeMod.storeSet('customTools', [
+      { id: 'tool-1', name: 'update_me', description: 'old', source_code: 'return 1' }
+    ])
+    const result = JSON.parse(
+      await executeElectronTool('manage_tool', {
+        action: 'update',
+        id: 'tool-1',
+        description: 'new description',
+        source_code: 'return 2'
+      })
+    )
+    expect(result.ok).toBe(true)
+    expect(result.tool.description).toBe('new description')
+    expect(result.tool.sourceCode).toBe('return 2')
+    expect(result.tool.updatedAt).toBeDefined()
+  })
+
+  it('should update tool by name', async () => {
+    storeMod.storeSet('customTools', [{ id: 'tool-2', name: 'by_name', description: 'old' }])
+    const result = JSON.parse(
+      await executeElectronTool('manage_tool', {
+        action: 'update',
+        id: 'by_name',
+        description: 'updated'
+      })
+    )
+    expect(result.ok).toBe(true)
+    expect(result.tool.description).toBe('updated')
+  })
+
+  it('should return error for update of non-existent tool', async () => {
+    storeMod.storeSet('customTools', [])
+    const result = JSON.parse(
+      await executeElectronTool('manage_tool', {
+        action: 'update',
+        id: 'ghost'
+      })
+    )
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain('not found')
+  })
+
+  it('should delete tool by id', async () => {
+    storeMod.storeSet('customTools', [{ id: 'del-1', name: 'delete_me', description: 'bye' }])
+    const result = JSON.parse(
+      await executeElectronTool('manage_tool', {
+        action: 'delete',
+        id: 'del-1'
+      })
+    )
+    expect(result.ok).toBe(true)
+    expect(result.deleted).toBe('delete_me')
+    expect(storeMod.storeGet('customTools').length).toBe(0)
+  })
+
+  it('should delete tool by name', async () => {
+    storeMod.storeSet('customTools', [{ id: 'del-2', name: 'delete_by_name', description: 'bye' }])
+    const result = JSON.parse(
+      await executeElectronTool('manage_tool', {
+        action: 'delete',
+        name: 'delete_by_name'
+      })
+    )
+    expect(result.ok).toBe(true)
+    expect(result.deleted).toBe('delete_by_name')
+  })
+
+  it('should return error for invalid action', async () => {
+    const result = JSON.parse(await executeElectronTool('manage_tool', { action: 'explode' }))
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain('must be create, update, or delete')
+  })
+
+  it('should require id or name for delete', async () => {
+    const result = JSON.parse(await executeElectronTool('manage_tool', { action: 'delete' }))
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain('required for delete')
+  })
+
+  it('should convert parameters array to JSON schema on create', async () => {
+    storeMod.storeSet('customTools', [])
+    const result = JSON.parse(
+      await executeElectronTool('manage_tool', {
+        action: 'create',
+        name: 'array_params',
+        description: 'test',
+        source_type: 'js_function',
+        source_code: 'return args.city',
+        parameters: [
+          { name: 'city', type: 'string', description: 'City name', required: true },
+          { name: 'units', type: 'string', description: 'Units' }
+        ]
+      })
+    )
+    expect(result.ok).toBe(true)
+    expect(result.tool.parameters.type).toBe('object')
+    expect(result.tool.parameters.properties.city.type).toBe('string')
+    expect(result.tool.parameters.required).toContain('city')
+    expect(result.tool.parameters.required).not.toContain('units')
+  })
+
+  it('should convert parameters array to JSON schema on update', async () => {
+    storeMod.storeSet('customTools', [
+      { id: 'up-1', name: 'update_params', parameters: { type: 'object', properties: {} } }
+    ])
+    const result = JSON.parse(
+      await executeElectronTool('manage_tool', {
+        action: 'update',
+        id: 'up-1',
+        parameters: [{ name: 'url', type: 'string', required: true }]
+      })
+    )
+    expect(result.ok).toBe(true)
+    expect(result.tool.parameters.properties.url.type).toBe('string')
+    expect(result.tool.parameters.required).toContain('url')
+  })
+
+  it('should invalidate tool definitions after create', async () => {
+    const { invalidateToolDefinitions } = await import('../src/main/chat/chat.session.js')
+    storeMod.storeSet('customTools', [])
+    invalidateToolDefinitions.mockClear()
+    await executeElectronTool('manage_tool', {
+      action: 'create',
+      name: 'invalidation_test',
+      source_type: 'js_function',
+      source_code: 'return 1'
+    })
+    expect(invalidateToolDefinitions).toHaveBeenCalled()
+  })
+
+  it('should allow toggling is_enabled via update', async () => {
+    storeMod.storeSet('customTools', [{ id: 'toggle-1', name: 'toggleable', is_enabled: true }])
+    const result = JSON.parse(
+      await executeElectronTool('manage_tool', {
+        action: 'update',
+        id: 'toggle-1',
+        is_enabled: false
+      })
+    )
+    expect(result.ok).toBe(true)
+    expect(result.tool.isEnabled).toBe(false)
   })
 })

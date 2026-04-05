@@ -1,4 +1,4 @@
-import { logger } from '../logger'
+import { logger } from '../core/logger'
 
 const MAX_CONCURRENT = 1
 const MAX_QUEUE_SIZE = 200

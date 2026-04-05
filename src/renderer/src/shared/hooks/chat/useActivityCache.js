@@ -60,8 +60,8 @@ export const useActivityCache = () => {
                 taskId: data.taskId,
                 type,
                 name: data.name || null,
-                rawResult: data.result || null,
-                timestamp: new Date().toISOString(),
+                result: data.result || null,
+                createdAt: new Date().toISOString(),
                 data
               },
               ...prev

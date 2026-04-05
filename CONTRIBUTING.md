@@ -25,7 +25,10 @@ vox/
 │   ├── indexing/         @vox-ai-app/indexing
 │   ├── parser/           @vox-ai-app/parser
 │   ├── storage/          @vox-ai-app/storage
-│   └── ui/               @vox-ai-app/ui
+│   ├── ui/               @vox-ai-app/ui
+│   ├── scheduler/        @vox-ai-app/scheduler
+│   ├── skills/           @vox-ai-app/skills
+│   └── channels/         @vox-ai-app/channels
 └── package.json
 ```
 
@@ -43,11 +46,14 @@ npm run dev       # starts the app with hot reload
   └── @vox-ai-app/tools (registry uses @vox-ai-app/mcp for MCP reconnection)
         └── @vox-ai-app/integrations (mail/screen/iMessage use tool utilities)
 
-@vox-ai-app/voice     (standalone — wake word + voice window)
-@vox-ai-app/indexing  (standalone — file indexing runtime)
-@vox-ai-app/parser    (standalone — document parsing)
-@vox-ai-app/storage   (standalone — local persistence)
-@vox-ai-app/ui        (standalone — React components)
+@vox-ai-app/voice       (standalone — wake word + voice window)
+@vox-ai-app/indexing    (standalone — file indexing runtime)
+@vox-ai-app/parser      (standalone — document parsing)
+@vox-ai-app/storage     (standalone — local persistence via SQLite)
+@vox-ai-app/ui          (standalone — React components)
+@vox-ai-app/scheduler   (standalone — cron-based job scheduling)
+@vox-ai-app/skills      (standalone — SKILL.md loader)
+@vox-ai-app/channels    (standalone — WhatsApp, Telegram, Discord, Slack adapters)
 ```
 
 When changing a package that others depend on, bump its version and update the dependent's `package.json` too.
@@ -63,7 +69,7 @@ Vox is Mac-first today, not Mac-only. This reflects where integrations exist rig
 
 **What is already cross-platform:**
 
-- `@vox-ai-app/mcp`, `@vox-ai-app/tools`, `@vox-ai-app/voice`, `@vox-ai-app/indexing`, `@vox-ai-app/parser`, `@vox-ai-app/storage`, `@vox-ai-app/ui` — all pure Node.js / React, no OS-specific code
+- `@vox-ai-app/mcp`, `@vox-ai-app/tools`, `@vox-ai-app/voice`, `@vox-ai-app/indexing`, `@vox-ai-app/parser`, `@vox-ai-app/storage`, `@vox-ai-app/ui`, `@vox-ai-app/scheduler`, `@vox-ai-app/skills`, `@vox-ai-app/channels` — all pure Node.js / React, no OS-specific code
 
 **How to add Windows or Linux support:**
 

@@ -95,7 +95,13 @@ export default function ModelSettingsPanel() {
       setActiveModel(null)
       setModels([])
     })
-    const unsubReady = window.api.models.onReady?.(() => {
+    const unsubReady = window.api.models.onReady?.((data) => {
+      setModelLoading(false)
+      setLoadPercent(0)
+      if (data?.path) setActiveModel(data.path)
+      refresh()
+    })
+    const unsubError = window.api.models.onError?.(() => {
       setModelLoading(false)
       setLoadPercent(0)
       refresh()
@@ -110,6 +116,7 @@ export default function ModelSettingsPanel() {
       unsubProgress?.()
       unsubNoModel?.()
       unsubReady?.()
+      unsubError?.()
       unsubLoadProgress?.()
     }
   }, [refresh])
@@ -124,7 +131,6 @@ export default function ModelSettingsPanel() {
       setModelLoading(true)
       setLoadPercent(0)
       await window.api.models.setActive(path)
-      setActiveModel(path)
     } catch (e) {
       setModelLoading(false)
       showFeedback('error', e?.message || 'Failed to switch model.')

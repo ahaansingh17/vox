@@ -2,7 +2,7 @@
 
 macOS system integrations for Vox: Apple Mail, Screen control, and iMessage. Each integration ships with tool implementations and LLM tool definitions.
 
-Requires macOS. Each integration needs specific system permissions granted by the user.
+- Initial release.## [1.0.0] - 2026-03-24- `openDb` / `closeDb` lifecycle.- WAL journal mode, foreign keys, auto-schema creation.- Initial SQLite-based persistence: conversations, messages, tasks, task activity.### Added## [1.0.2] - 2026-04-01- `checkpointId` type consistency.- `getAllSettings` return type (now returns object instead of array).### Fixed- Added migration system (`src/migrations/runner.js` + `001_initial_schema.js`).- Added new exports: `./tools`, `./settings`, `./mcp-servers`, `./schedules`, `./tool-secrets`, `./patterns`, `./vectors`.- Updated exports map: all repo modules now resolve to `./src/repos/*.js`.- Moved 9 repository files from flat `src/` into `src/repos/` subdirectory.### ChangedRequires macOS. Each integration needs specific system permissions granted by the user.
 
 ## Install
 
@@ -17,7 +17,9 @@ Peer dependency: `electron >= 28`
 | Export                                    | Contents                      |
 | ----------------------------------------- | ----------------------------- |
 | `@vox-ai-app/integrations`                | All exports                   |
-| `@vox-ai-app/integrations/defs`           | All tool definitions          |
+| `@vox-ai-app/integrations/defs/mail`      | Mail tool definitions         |
+| `@vox-ai-app/integrations/defs/screen`    | Screen tool definitions       |
+| `@vox-ai-app/integrations/defs/imessage`  | iMessage tool definitions     |
 | `@vox-ai-app/integrations/mail`           | Mail functions                |
 | `@vox-ai-app/integrations/screen`         | Screen capture + control      |
 | `@vox-ai-app/integrations/screen/capture` | Capture only                  |
@@ -40,7 +42,7 @@ await replyToEmail({ messageId: '...', body: 'Thanks!' })
 Tool definitions:
 
 ```js
-import { MAIL_TOOL_DEFINITIONS } from '@vox-ai-app/integrations/defs'
+import { MAIL_TOOL_DEFINITIONS } from '@vox-ai-app/integrations/defs/mail'
 ```
 
 ## Screen
@@ -69,7 +71,7 @@ try {
 Tool definitions:
 
 ```js
-import { SCREEN_TOOL_DEFINITIONS } from '@vox-ai-app/integrations/defs'
+import { SCREEN_TOOL_DEFINITIONS } from '@vox-ai-app/integrations/defs/screen'
 ```
 
 ## iMessage
@@ -112,7 +114,7 @@ svc.start('my-passphrase')
 Tool definitions:
 
 ```js
-import { IMESSAGE_TOOL_DEFINITIONS } from '@vox-ai-app/integrations/defs'
+import { IMESSAGE_TOOL_DEFINITIONS } from '@vox-ai-app/integrations/defs/imessage'
 ```
 
 ## License

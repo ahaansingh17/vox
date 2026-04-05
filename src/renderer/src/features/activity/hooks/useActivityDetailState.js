@@ -13,7 +13,7 @@ function getLastProgressTime(taskEvents, isRunning) {
   const progressEvents = taskEvents.filter((event) => event.type === 'task.progress')
   if (!progressEvents.length) return null
   const lastEvent = progressEvents[progressEvents.length - 1]
-  return lastEvent?.at || lastEvent?.timestamp || null
+  return lastEvent?.at || lastEvent?.createdAt || null
 }
 
 function getLatestThought(taskEvents, isRunning) {
@@ -29,14 +29,14 @@ function buildGroupedPairs(taskEvents, lastProgressTime, isRunning) {
   const calls = taskEvents.filter((event) => {
     if (event.type !== 'tool_call' && event.type !== 'task.request') return false
     if (!isRunning || !lastProgressTime) return true
-    const eventTime = event.at || event.timestamp
+    const eventTime = event.at || event.createdAt
     return eventTime && eventTime > lastProgressTime
   })
 
   const results = taskEvents.filter((event) => {
     if (event.type !== 'tool_result') return false
     if (!lastProgressTime) return true
-    const eventTime = event.at || event.timestamp
+    const eventTime = event.at || event.createdAt
     return eventTime && eventTime > lastProgressTime
   })
 
@@ -51,15 +51,15 @@ function buildGroupedPairs(taskEvents, lastProgressTime, isRunning) {
     if (matchedResult) usedResultIds.add(matchedResult.id)
 
     const pair = { call, result: matchedResult || null }
-    const rawResult = pair.result?.rawResult
-    const exitCode = rawResult && typeof rawResult === 'object' ? rawResult.exitCode : undefined
+    const toolResult = pair.result?.result
+    const exitCode = toolResult && typeof toolResult === 'object' ? toolResult.exitCode : undefined
     const isFailing = exitCode !== undefined && exitCode !== 0
 
     const lastGroup = groups[groups.length - 1]
     const lastName = lastGroup?.call?.name || lastGroup?.call?.data?.name || ''
-    const lastRawResult = lastGroup?.result?.rawResult
+    const lastToolResult = lastGroup?.result?.result
     const lastExitCode =
-      lastRawResult && typeof lastRawResult === 'object' ? lastRawResult.exitCode : undefined
+      lastToolResult && typeof lastToolResult === 'object' ? lastToolResult.exitCode : undefined
     const lastFailing = lastExitCode !== undefined && lastExitCode !== 0
 
     if (lastGroup && callName === lastName && isFailing && lastFailing) {
@@ -87,7 +87,7 @@ export function useActivityDetailState({ taskId, liveTask, taskEvents }) {
   const instructions = liveTask?.spawnInstructions || dbTask?.instructions || ''
   const createdAt = liveTask?.spawnedAt || dbTask?.created_at || ''
   const completedAt = liveTask?.completedAt || dbTask?.completed_at || ''
-  const errorMsg = dbTask?.error || dbTask?.abort_reason || liveTask?.message || ''
+  const errorMsg = dbTask?.error || dbTask?.abort_reason || liveTask?.error || ''
   const elapsed = elapsedLabel(createdAt, completedAt || (isRunning ? null : completedAt))
   const steps = mergeSteps(dbTask?.steps)
   const color = TASK_STATUS_COLOR[effectiveStatus] || 'muted'

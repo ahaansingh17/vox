@@ -1,12 +1,12 @@
 import { emitAll } from '../ipc/shared'
-import { startAgent, abortAgent, onAgentEvent } from '../ai/llm.bridge'
-import { logger } from '../logger'
+import { startAgent, abortAgent, onAgentEvent } from '../ai/llm/bridge'
+import { logger } from '../core/logger'
 import {
   appendTaskActivity,
   loadAllTaskActivity,
   loadTasks,
   upsertTask,
-  indexTaskInFts
+  indexTaskEmbedding
 } from '../storage/tasks.db'
 import {
   normalizeLimit,
@@ -38,17 +38,16 @@ function buildTaskObject(taskId) {
 
 function persistTaskMeta(meta) {
   upsertTask({
-    taskId: meta.taskId,
+    id: meta.taskId,
     instructions: meta.instructions,
     context: meta.context,
     status: meta.status,
     createdAt: meta.createdAt,
     updatedAt: meta.updatedAt,
     currentPlan: meta.currentPlan,
-    message: meta.message,
+    error: meta.error,
     result: meta.result,
-    completedAt: meta.completedAt,
-    failedAt: meta.failedAt
+    completedAt: meta.completedAt
   })
 }
 
@@ -59,7 +58,7 @@ function hydrateTaskState() {
   for (const storedTask of loadTasks()) {
     const isInterrupted = storedTask.status === 'queued' || storedTask.status === 'running'
     const normalized = {
-      taskId: storedTask.taskId,
+      taskId: storedTask.id,
       instructions: storedTask.instructions || '',
       context: storedTask.context || '',
       toolDefinitions: [],
@@ -67,12 +66,11 @@ function hydrateTaskState() {
       createdAt: storedTask.createdAt || new Date().toISOString(),
       updatedAt: storedTask.updatedAt || storedTask.createdAt || new Date().toISOString(),
       currentPlan: storedTask.currentPlan || '',
-      message: isInterrupted
+      error: isInterrupted
         ? 'Interrupted by app restart — resume to continue.'
-        : storedTask.message || '',
+        : storedTask.error || '',
       result: storedTask.result || null,
-      completedAt: isInterrupted ? '' : storedTask.completedAt || '',
-      failedAt: isInterrupted ? new Date().toISOString() : storedTask.failedAt || ''
+      completedAt: isInterrupted ? '' : storedTask.completedAt || ''
     }
 
     taskMeta.set(normalized.taskId, normalized)
@@ -158,10 +156,9 @@ export function enqueueTask(task) {
     createdAt: now,
     updatedAt: now,
     currentPlan: '',
-    message: '',
+    error: '',
     result: null,
-    completedAt: '',
-    failedAt: ''
+    completedAt: ''
   })
   taskActivity.set(taskId, [])
   persistTaskMeta(taskMeta.get(taskId))
@@ -178,7 +175,7 @@ export function abortTask(taskId) {
   const idx = queue.findIndex((t) => t.taskId === taskId)
   if (idx >= 0) {
     queue.splice(idx, 1)
-    setStatus(taskId, 'aborted', { message: 'Cancelled before starting' })
+    setStatus(taskId, 'aborted', { error: 'Cancelled before starting' })
     return
   }
   if (active.has(taskId)) {
@@ -207,10 +204,9 @@ export async function resumeTask(taskId) {
 
   meta.status = 'queued'
   meta.updatedAt = new Date().toISOString()
-  meta.message = ''
+  meta.error = ''
   meta.result = null
   meta.completedAt = ''
-  meta.failedAt = ''
   meta.toolDefinitions = _toolDefinitionProvider?.() || []
   persistTaskMeta(meta)
 
@@ -256,7 +252,7 @@ export function getCachedActivityEvents() {
     result.push(...events)
   }
 
-  return result.sort((a, b) => (a.timestamp < b.timestamp ? -1 : 1))
+  return result.sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1))
 }
 
 export function getTaskCacheStatus() {
@@ -318,24 +314,20 @@ function runTask({ taskId, instructions, context, toolDefinitions }) {
     if (event.type === 'task.status') {
       const { status, result, message } = event
       const extra = {}
-      if (message !== undefined) extra.message = message
+      if (message !== undefined) extra.error = message
       if (result !== undefined) extra.result = result
       if (['completed', 'failed', 'aborted', 'incomplete'].includes(status)) {
         const meta = taskMeta.get(taskId)
         if (meta) {
-          if (status === 'completed' || status === 'incomplete')
+          if (['completed', 'incomplete', 'failed', 'aborted'].includes(status))
             meta.completedAt = new Date().toISOString()
-          if (status === 'failed' || status === 'aborted') meta.failedAt = new Date().toISOString()
         }
         setStatus(taskId, status, extra)
         if (status === 'completed' || status === 'incomplete') {
           const m = taskMeta.get(taskId)
           if (m) {
-            try {
-              indexTaskInFts(taskId, m.instructions, extra.result || m.result || '')
-            } catch (err) {
-              logger.warn('[task.queue] FTS indexing failed:', err.message)
-            }
+            const taskResult = extra.result || m.result || ''
+            indexTaskEmbedding(taskId, m.instructions, taskResult).catch(() => {})
           }
         }
         const entry = active.get(taskId)
@@ -432,9 +424,9 @@ export function getTaskDetail(taskId) {
         taskId: event.taskId,
         type: event.type,
         name: event.name || event.data?.name || '',
-        rawResult: event.rawResult,
-        at: event.timestamp,
-        timestamp: event.timestamp,
+        result: event.result,
+        at: event.createdAt,
+        createdAt: event.createdAt,
         data: event.data
       }))
     }

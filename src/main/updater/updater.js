@@ -1,6 +1,6 @@
 import { autoUpdater } from 'electron-updater'
 import { is } from '@electron-toolkit/utils'
-import { logger } from '../logger'
+import { logger } from '../core/logger'
 import { emitAll } from '../ipc/shared'
 
 export function initUpdater() {

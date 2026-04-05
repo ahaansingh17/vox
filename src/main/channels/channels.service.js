@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
-import { logger } from './logger'
+import { logger } from '../core/logger'
 
 const channels = new Map()
 let _messageHandler = null

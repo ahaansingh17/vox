@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto'
-import { sendChatMessage, waitForChatResult } from '../ai/llm.bridge'
+import { sendChatMessage, waitForChatResult } from '../ai/llm/bridge'
 import { getToolDefinitions } from '../chat/chat.tools'
 import { getSystemPrompt } from '../chat/chat.session'
 

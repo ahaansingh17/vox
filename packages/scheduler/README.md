@@ -1,6 +1,6 @@
 # @vox-ai-app/scheduler
 
-Cron-based job scheduler for Vox — schedule recurring agent runs, heartbeats, and timed tasks with timezone support, persistent storage, and automatic restore on restart.
+Cron-based job scheduler for Vox — schedule recurring agent runs, heartbeats, and timed tasks with timezone support.
 
 ## Install
 
@@ -10,11 +10,10 @@ npm install @vox-ai-app/scheduler
 
 ## Exports
 
-| Export                        | Contents                              |
-| ----------------------------- | ------------------------------------- |
-| `@vox-ai-app/scheduler`       | All scheduler exports                 |
-| `@vox-ai-app/scheduler/cron`  | Job scheduling, cancellation, listing |
-| `@vox-ai-app/scheduler/store` | JSON file persistence for schedules   |
+| Export                       | Contents                              |
+| ---------------------------- | ------------------------------------- |
+| `@vox-ai-app/scheduler`      | All scheduler exports                 |
+| `@vox-ai-app/scheduler/cron` | Job scheduling, cancellation, listing |
 
 ## Usage
 
@@ -29,23 +28,11 @@ const job = scheduleJob(
   }
 )
 
-console.log(listJobs()) // [{ id, expr, tz, nextRun }]
+console.log(listJobs())
 cancelJob('daily-check')
 ```
 
-## Persistent store
-
-```js
-import { createStore } from '@vox-ai-app/scheduler/store'
-
-const store = createStore('/path/to/data')
-store.save({ id: 'job1', expr: '*/5 * * * *', prompt: 'Check status' })
-store.list() // all saved schedules
-store.get('job1')
-store.remove('job1')
-```
-
-The store writes to `schedules.json` inside the given directory, creating it if needed.
+Schedule persistence is handled by the app layer via `@vox-ai-app/storage/schedules`.
 
 ## API
 
@@ -66,23 +53,14 @@ The store writes to `schedules.json` inside the given directory, creating it if 
 scheduleJob(
   id,
   {
-    expr: '0 9 * * 1-5', // 5-field cron
-    tz: 'America/New_York', // optional IANA timezone
-    runImmediately: false, // fire once immediately on schedule
-    onError: (err) => {} // error callback
+    expr: '0 9 * * 1-5',
+    tz: 'America/New_York',
+    runImmediately: false,
+    onError: (err) => {}
   },
   handler
 )
 ```
-
-### Store
-
-| Method   | Description                 |
-| -------- | --------------------------- |
-| `save`   | Save or update a schedule   |
-| `remove` | Remove a schedule by ID     |
-| `get`    | Get a single schedule by ID |
-| `list`   | List all saved schedules    |
 
 ## Dependencies
 

@@ -3,10 +3,11 @@ import { join } from 'path'
 import { rmSync } from 'fs'
 import { app } from 'electron'
 import { emitAll } from '../ipc/shared'
-import { logger } from '../logger'
+import { logger } from '../core/logger'
+import { initVad, processSamples, resetVad, destroyVad } from './vad'
 
 const SAMPLE_RATE = 16000
-const SILENCE_THRESHOLD = 400
+const VAD_CHUNK_SIZE = 512
 const SILENCE_DURATION_SAMPLES = Math.floor((SAMPLE_RATE * 500) / 1000)
 const MIN_SPEECH_SAMPLES = Math.floor((SAMPLE_RATE * 200) / 1000)
 const MAX_SPEECH_SAMPLES = SAMPLE_RATE * 30
@@ -29,6 +30,8 @@ let totalSamples = 0
 let speechDetected = false
 let silentSamples = 0
 let transcribing = false
+let vadBuffer = new Int16Array(0)
+let hearingFired = false
 
 function workerPath() {
   const base = app.getAppPath().replace('app.asar', 'app.asar.unpacked')
@@ -127,6 +130,14 @@ function spawnWorker() {
 export function initStt() {
   if (worker) return
 
+  initVad()
+    .then(() => {
+      logger.info('[stt] Silero VAD ready')
+    })
+    .catch((err) => {
+      logger.error('[stt] VAD init failed:', err?.message || err)
+    })
+
   spawnWorker()
   worker.postMessage({ type: 'init', cacheDir: getSttCacheDir() })
 }
@@ -153,12 +164,6 @@ export function waitSttReady() {
     _readyResolvers.push(resolve)
     _readyRejectors.push(reject)
   })
-}
-
-function rms(samples) {
-  let sum = 0
-  for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i]
-  return Math.sqrt(sum / samples.length)
 }
 
 function mergeChunks() {
@@ -200,25 +205,59 @@ function processChunk(chunk) {
   chunks.push(chunk)
   totalSamples += chunk.length
 
-  const energy = rms(chunk)
+  const combined = new Int16Array(vadBuffer.length + chunk.length)
+  combined.set(vadBuffer, 0)
+  combined.set(chunk, vadBuffer.length)
 
-  if (energy > SILENCE_THRESHOLD) {
-    if (!speechDetected) _onHearing?.()
-    speechDetected = true
-    silentSamples = 0
-  } else if (speechDetected) {
-    silentSamples += chunk.length
-    if (silentSamples >= SILENCE_DURATION_SAMPLES && totalSamples >= MIN_SPEECH_SAMPLES) {
-      submitForTranscription()
+  let offset = 0
+  const processNextVadFrame = () => {
+    if (offset + VAD_CHUNK_SIZE > combined.length) {
+      vadBuffer = combined.slice(offset)
+      finishChunk()
       return
     }
+
+    const frame = combined.slice(offset, offset + VAD_CHUNK_SIZE)
+    offset += VAD_CHUNK_SIZE
+
+    processSamples(frame)
+      .then((result) => {
+        if (result.event === 'start') {
+          if (!hearingFired) {
+            hearingFired = true
+            _onHearing?.()
+          }
+          speechDetected = true
+          silentSamples = 0
+        } else if (result.speech) {
+          silentSamples = 0
+        } else if (speechDetected && !result.speech) {
+          silentSamples += VAD_CHUNK_SIZE
+        }
+        processNextVadFrame()
+      })
+      .catch(() => {
+        vadBuffer = new Int16Array(0)
+        finishChunk()
+      })
   }
 
+  processNextVadFrame()
+}
+
+function finishChunk() {
+  if (
+    speechDetected &&
+    silentSamples >= SILENCE_DURATION_SAMPLES &&
+    totalSamples >= MIN_SPEECH_SAMPLES
+  ) {
+    submitForTranscription()
+    return
+  }
   if (speechDetected && totalSamples >= MAX_SPEECH_SAMPLES) {
     submitForTranscription()
     return
   }
-
   if (!speechDetected && totalSamples > MAX_IDLE_SAMPLES) {
     resetBuffers()
   }
@@ -246,6 +285,9 @@ export function resetBuffers() {
   totalSamples = 0
   speechDetected = false
   silentSamples = 0
+  vadBuffer = new Int16Array(0)
+  hearingFired = false
+  resetVad()
 }
 
 export function hasSpeechActivity() {
@@ -258,4 +300,5 @@ export function destroyStt() {
   ready = false
   transcribing = false
   resetBuffers()
+  destroyVad()
 }

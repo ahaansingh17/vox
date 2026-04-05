@@ -9,7 +9,7 @@ vi.mock('../src/main/ipc/shared', () => ({
   emitAll: (...args) => mockEmitAll(...args)
 }))
 
-vi.mock('../src/main/ai/llm.bridge', () => ({
+vi.mock('../src/main/ai/llm/bridge', () => ({
   startAgent: (...args) => mockStartAgent(...args),
   abortAgent: (...args) => mockAbortAgent(...args),
   onAgentEvent: (taskId, callback) => {
@@ -18,7 +18,7 @@ vi.mock('../src/main/ai/llm.bridge', () => ({
   }
 }))
 
-vi.mock('../src/main/logger', () => ({
+vi.mock('../src/main/core/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
 }))
 
@@ -26,7 +26,7 @@ const mockTaskRows = []
 const mockActivityRows = []
 vi.mock('../src/main/storage/tasks.db', () => ({
   upsertTask: vi.fn((task) => {
-    const idx = mockTaskRows.findIndex((t) => t.taskId === task.taskId)
+    const idx = mockTaskRows.findIndex((t) => t.id === task.id)
     if (idx >= 0) mockTaskRows[idx] = task
     else mockTaskRows.push(task)
   }),
@@ -34,6 +34,7 @@ vi.mock('../src/main/storage/tasks.db', () => ({
   appendTaskActivity: vi.fn((event) => mockActivityRows.push(event)),
   loadAllTaskActivity: () => [...mockActivityRows],
   indexTaskInFts: vi.fn(),
+  indexTaskEmbedding: vi.fn(async () => {}),
   searchTasksFts: vi.fn(() => []),
   searchKnowledgePatterns: vi.fn(() => []),
   insertKnowledgePattern: vi.fn()
@@ -103,7 +104,7 @@ describe('enqueueTask', () => {
       toolDefinitions: []
     })
 
-    const persisted = mockTaskRows.find((t) => t.taskId === 'task-4')
+    const persisted = mockTaskRows.find((t) => t.id === 'task-4')
     expect(persisted).toBeTruthy()
     expect(persisted.status).toBe('running')
   })
@@ -346,17 +347,16 @@ describe('resumeTask', () => {
 describe('hydration from DB', () => {
   it('should mark interrupted (queued/running) tasks as failed on hydration', async () => {
     mockTaskRows.push({
-      taskId: 'hydrate-1',
+      id: 'hydrate-1',
       instructions: 'interrupted',
       context: '',
       status: 'running',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       currentPlan: '',
-      message: '',
+      error: '',
       result: null,
-      completedAt: '',
-      failedAt: ''
+      completedAt: ''
     })
 
     vi.resetModules()
@@ -364,6 +364,6 @@ describe('hydration from DB', () => {
     const freshMod = await import('../src/main/chat/task.queue.js')
     const task = freshMod.getTask('hydrate-1')
     expect(task.status).toBe('failed')
-    expect(task.message).toContain('restart')
+    expect(task.error).toContain('restart')
   })
 })

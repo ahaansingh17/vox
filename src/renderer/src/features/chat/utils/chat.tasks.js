@@ -14,13 +14,12 @@ export const createEmptyTaskState = (taskId, timestamp) => ({
   status: 'spawned',
   completedCount: 0,
   currentPlan: '',
-  message: '',
+  error: '',
   resultPreview: '',
   spawnRequestedAt: '',
   spawnedAt: '',
   startedAt: '',
   completedAt: '',
-  failedAt: '',
   spawnInstructions: '',
   spawnContext: '',
   spawnArgsPreview: '',
@@ -45,16 +44,16 @@ export const upsertTaskState = (currentTasks, taskId, patch, timestamp) => {
 }
 
 export const getTaskIdFromEventData = (data) =>
-  String(data?.taskId || data?.result?.taskId || '').trim()
+  String(data?.taskId || data?.result?.id || '').trim()
 
 export const applyTaskEvent = (event, setTasks, options = {}) => {
   const type = String(event?.type || '')
   const data = event?.data || {}
-  const timestamp = event?.timestamp || new Date().toISOString()
+  const timestamp = event?.createdAt || event?.timestamp || new Date().toISOString()
   const dequeuePendingSpawn =
     typeof options?.dequeuePendingSpawn === 'function' ? options.dequeuePendingSpawn : null
 
-  if (type === 'tool_result' && data?.name === 'spawn_task' && data?.result?.taskId) {
+  if (type === 'tool_result' && data?.name === 'spawn_task' && data?.result?.id) {
     applySpawnResultEvent(data, timestamp, setTasks, dequeuePendingSpawn)
     return
   }

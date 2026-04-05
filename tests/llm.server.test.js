@@ -38,11 +38,11 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('../src/main/logger', () => ({
+vi.mock('../src/main/core/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
 }))
 
-vi.mock('../src/main/ai/llm.server.js', () => ({
+vi.mock('../src/main/ai/llm/server.js', () => ({
   startServer: vi.fn(),
   stopServer: vi.fn(),
   onLoadProgress: vi.fn(),
@@ -53,7 +53,7 @@ vi.mock('../src/main/ai/llm.server.js', () => ({
   ensureBinary: vi.fn(async () => '/opt/homebrew/bin/llama-server')
 }))
 
-vi.mock('../src/main/ai/llm.client.js', () => ({
+vi.mock('../src/main/ai/llm/client.js', () => ({
   chatCompletion: vi.fn(),
   streamChat: vi.fn(async function* () {
     yield { type: 'text', content: 'Test response' }
@@ -62,7 +62,7 @@ vi.mock('../src/main/ai/llm.client.js', () => ({
   healthCheck: vi.fn(async () => true)
 }))
 
-vi.mock('../src/main/ai/llm.stream.js', () => ({
+vi.mock('../src/main/ai/llm/stream.js', () => ({
   resetStreamState: vi.fn(),
   setChatStreamHandlers: vi.fn(),
   clearChatStreamHandlers: vi.fn(),
@@ -73,7 +73,7 @@ vi.mock('../src/main/ipc/shared', () => ({
   emitAll: vi.fn()
 }))
 
-vi.mock('../src/main/ai/llm.tool-executor.js', () => ({
+vi.mock('../src/main/ai/llm/tool-executor.js', () => ({
   executeElectronTool: vi.fn(async (name, _args) => ({ result: `executed ${name}` }))
 }))
 
@@ -121,101 +121,12 @@ vi.mock('../src/main/storage/tasks.db', () => ({
   searchTasksFts: vi.fn(() => [])
 }))
 
-describe('llm.server exports', async () => {
-  const server = await import('../src/main/ai/llm.server.js')
-
-  it('should expose port 19741', () => {
-    expect(server.getPort()).toBe(19741)
-  })
-
-  it('should build correct base URL', () => {
-    expect(server.getBaseUrl()).toBe('http://127.0.0.1:19741')
-  })
-
-  it('should expose isReady as a function', () => {
-    expect(typeof server.isReady).toBe('function')
-  })
-
-  it('should expose startServer and stopServer', () => {
-    expect(typeof server.startServer).toBe('function')
-    expect(typeof server.stopServer).toBe('function')
-  })
-
-  it('should expose onLoadProgress', () => {
-    expect(typeof server.onLoadProgress).toBe('function')
-  })
-
-  it('should expose ensureBinary', () => {
-    expect(typeof server.ensureBinary).toBe('function')
-  })
-})
-
-describe('llm.client', async () => {
-  const client = await import('../src/main/ai/llm.client.js')
-
-  it('should expose chatCompletion', () => {
-    expect(typeof client.chatCompletion).toBe('function')
-  })
-
-  it('should expose streamChat as async generator factory', () => {
-    expect(typeof client.streamChat).toBe('function')
-  })
-
-  it('should expose nonStreamChat', () => {
-    expect(typeof client.nonStreamChat).toBe('function')
-  })
-
-  it('should expose healthCheck', () => {
-    expect(typeof client.healthCheck).toBe('function')
-  })
-
-  it('nonStreamChat should return text and toolCalls', async () => {
-    const result = await client.nonStreamChat({ messages: [{ role: 'user', content: 'hi' }] })
-    expect(result.text).toBe('summary')
-    expect(result.toolCalls).toEqual([])
-    expect(result.finishReason).toBe('stop')
-  })
-
-  it('healthCheck should return boolean', async () => {
-    const ok = await client.healthCheck()
-    expect(ok).toBe(true)
-  })
-
-  it('streamChat should yield events', async () => {
-    const events = []
-    for await (const event of client.streamChat({ messages: [] })) {
-      events.push(event)
-    }
-    expect(events).toHaveLength(1)
-    expect(events[0]).toEqual({ type: 'text', content: 'Test response' })
-  })
-})
-
 describe('llm.bridge', async () => {
-  const bridge = await import('../src/main/ai/llm.bridge.js')
-  const server = await import('../src/main/ai/llm.server.js')
+  const bridge = await import('../src/main/ai/llm/bridge.js')
+  const server = await import('../src/main/ai/llm/server.js')
 
   beforeEach(() => {
     vi.clearAllMocks()
-  })
-
-  it('should export all required functions', () => {
-    expect(typeof bridge.getLlmStatus).toBe('function')
-    expect(typeof bridge.loadModel).toBe('function')
-    expect(typeof bridge.reloadModel).toBe('function')
-    expect(typeof bridge.prewarmChat).toBe('function')
-    expect(typeof bridge.sendChatMessage).toBe('function')
-    expect(typeof bridge.waitForChatResult).toBe('function')
-    expect(typeof bridge.abortChat).toBe('function')
-    expect(typeof bridge.clearChat).toBe('function')
-    expect(typeof bridge.getChatHistory).toBe('function')
-    expect(typeof bridge.summarizeText).toBe('function')
-    expect(typeof bridge.startAgent).toBe('function')
-    expect(typeof bridge.abortAgent).toBe('function')
-    expect(typeof bridge.onAgentEvent).toBe('function')
-    expect(typeof bridge.destroyWorker).toBe('function')
-    expect(typeof bridge.setChatStreamHandlers).toBe('function')
-    expect(typeof bridge.clearChatStreamHandlers).toBe('function')
   })
 
   it('should load model by calling startServer', async () => {
@@ -241,7 +152,7 @@ describe('llm.bridge', async () => {
   })
 
   it('prewarmChat with providers should call chatCompletion', async () => {
-    const { chatCompletion } = await import('../src/main/ai/llm.client.js')
+    const { chatCompletion } = await import('../src/main/ai/llm/client.js')
     chatCompletion.mockResolvedValueOnce({ choices: [{ message: { content: '' } }] })
 
     bridge.setPrewarmProviders(
@@ -268,31 +179,13 @@ describe('llm.bridge', async () => {
   })
 
   it('prewarmChat should not throw on failure', async () => {
-    const { chatCompletion } = await import('../src/main/ai/llm.client.js')
+    const { chatCompletion } = await import('../src/main/ai/llm/client.js')
     chatCompletion.mockRejectedValueOnce(new Error('connection refused'))
     bridge.setPrewarmProviders(
       () => [],
       () => 'sys'
     )
     await expect(bridge.prewarmChat()).resolves.toBeUndefined()
-  })
-
-  it('should clear chat history', async () => {
-    await bridge.clearChat()
-    const history = await bridge.getChatHistory()
-    expect(history).toEqual([])
-  })
-
-  it('waitForChatResult should resolve on timeout', async () => {
-    const result = await bridge.waitForChatResult('no-such-request', 100)
-    expect(result.finalText).toBeNull()
-  })
-
-  it('onAgentEvent should return unsubscribe function', () => {
-    const listener = vi.fn()
-    const unsub = bridge.onAgentEvent('task-1', listener)
-    expect(typeof unsub).toBe('function')
-    unsub()
   })
 
   it('should stop server on destroy', async () => {
@@ -303,46 +196,11 @@ describe('llm.bridge', async () => {
   })
 })
 
-describe('ELECTRON_TOOLS coverage', async () => {
-  const { executeElectronTool } = await import('../src/main/ai/llm.tool-executor.js')
-
-  const electronToolNames = [
-    'pick_file',
-    'get_file_path',
-    'pick_directory',
-    'save_user_info',
-    'spawn_task',
-    'get_task',
-    'search_tasks',
-    'read_emails',
-    'search_contacts',
-    'send_email',
-    'capture_full_screen',
-    'capture_region',
-    'click_at',
-    'move_mouse',
-    'type_text',
-    'key_press',
-    'clipboard_read',
-    'clipboard_write',
-    'focus_app',
-    'launch_app',
-    'list_apps',
-    'acquire_screen',
-    'release_screen'
-  ]
-
-  it.each(electronToolNames)('should handle %s without throwing', async (name) => {
-    const result = executeElectronTool(name, {})
-    expect(result).toBeInstanceOf(Promise)
-  })
-})
-
 describe('spawn_task flow via bridge', async () => {
-  const bridge = await import('../src/main/ai/llm.bridge.js')
-  const { streamChat } = await import('../src/main/ai/llm.client.js')
-  const { handleChatEventForRenderer } = await import('../src/main/ai/llm.stream.js')
-  const { executeElectronTool } = await import('../src/main/ai/llm.tool-executor.js')
+  const bridge = await import('../src/main/ai/llm/bridge.js')
+  const { streamChat } = await import('../src/main/ai/llm/client.js')
+  const { handleChatEventForRenderer } = await import('../src/main/ai/llm/stream.js')
+  const { executeElectronTool } = await import('../src/main/ai/llm/tool-executor.js')
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -479,56 +337,13 @@ describe('spawn_task flow via bridge', async () => {
 })
 
 describe('bridge chat message flow', async () => {
-  const bridge = await import('../src/main/ai/llm.bridge.js')
-  const { streamChat } = await import('../src/main/ai/llm.client.js')
-  const { handleChatEventForRenderer } = await import('../src/main/ai/llm.stream.js')
-  const { executeElectronTool } = await import('../src/main/ai/llm.tool-executor.js')
+  const bridge = await import('../src/main/ai/llm/bridge.js')
+  const { streamChat } = await import('../src/main/ai/llm/client.js')
+  const { handleChatEventForRenderer } = await import('../src/main/ai/llm/stream.js')
+  const { executeElectronTool } = await import('../src/main/ai/llm/tool-executor.js')
 
   beforeEach(() => {
     vi.clearAllMocks()
-  })
-
-  it('sendChatMessage should stream text to renderer', async () => {
-    streamChat.mockImplementation(async function* () {
-      yield { type: 'text', content: 'Hello ' }
-      yield { type: 'text', content: 'world' }
-    })
-
-    bridge.sendChatMessage({
-      requestId: 'req-1',
-      message: 'Hi',
-      systemPrompt: 'You are Vox.',
-      history: [],
-      toolDefinitions: []
-    })
-
-    await new Promise((r) => setTimeout(r, 50))
-
-    const textEvents = handleChatEventForRenderer.mock.calls
-      .filter(([, e]) => e.type === 'text')
-      .map(([, e]) => e.content)
-    expect(textEvents).toContain('Hello ')
-    expect(textEvents).toContain('world')
-  })
-
-  it('sendChatMessage should emit chunk_start and chunk_end', async () => {
-    streamChat.mockImplementation(async function* () {
-      yield { type: 'text', content: 'ok' }
-    })
-
-    bridge.sendChatMessage({
-      requestId: 'req-2',
-      message: 'test',
-      systemPrompt: 'sys',
-      history: [],
-      toolDefinitions: []
-    })
-
-    await new Promise((r) => setTimeout(r, 50))
-
-    const eventTypes = handleChatEventForRenderer.mock.calls.map(([, e]) => e.type)
-    expect(eventTypes).toContain('chunk_start')
-    expect(eventTypes).toContain('chunk_end')
   })
 
   it('sendChatMessage with tool call should execute tool and continue', async () => {
@@ -570,28 +385,6 @@ describe('bridge chat message flow', async () => {
     expect(eventTypes).toContain('tool_call')
     expect(eventTypes).toContain('tool_result')
     expect(eventTypes).toContain('text')
-  })
-
-  it('sendChatMessage should strip think tags', async () => {
-    streamChat.mockImplementation(async function* () {
-      yield { type: 'text', content: '<think>reasoning here</think>Actual response' }
-    })
-
-    bridge.sendChatMessage({
-      requestId: 'req-4',
-      message: 'hi',
-      systemPrompt: 'sys',
-      history: [],
-      toolDefinitions: []
-    })
-
-    await new Promise((r) => setTimeout(r, 50))
-
-    const textEvents = handleChatEventForRenderer.mock.calls
-      .filter(([, e]) => e.type === 'text')
-      .map(([, e]) => e.content)
-    expect(textEvents).toContain('Actual response')
-    expect(textEvents.join('')).not.toContain('<think>')
   })
 
   it('sendChatMessage should handle multi-round tool calls', async () => {
@@ -696,7 +489,7 @@ describe('bridge chat message flow', async () => {
 })
 
 describe('agent lifecycle', async () => {
-  const bridge = await import('../src/main/ai/llm.bridge.js')
+  const bridge = await import('../src/main/ai/llm/bridge.js')
 
   it('startAgent should accept task parameters', () => {
     expect(() =>

@@ -1,7 +1,7 @@
 import { emitAll } from '../ipc/shared'
-import { getLlmStatus } from '../ai/llm.bridge'
+import { getLlmStatus } from '../ai/llm/bridge'
 import { isReady as isSttReady } from './stt.service'
-import { logger } from '../logger'
+import { logger } from '../core/logger'
 import {
   initVoiceService as _init,
   destroyVoiceService as _destroy,

@@ -8,7 +8,7 @@ ONNX-based wake word detection, keyboard shortcut registration, and voice overla
 npm install @vox-ai-app/voice
 ```
 
-Peer dependencies: `electron >= 28`, `@picovoice/pvrecorder-node >= 1.0.0`, `onnxruntime-node >= 1.18.0`
+Peer dependencies: `electron >= 28`, `@picovoice/pvrecorder-node >= 1.0.0`, `onnxruntime-web >= 1.18.0`
 
 ## Requirements
 

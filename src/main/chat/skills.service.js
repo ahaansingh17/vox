@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import path from 'node:path'
 import { loadAllSkills, resolveDefaultSkillDirs, formatSkillsForPrompt } from '@vox-ai-app/skills'
-import { logger } from '../logger'
+import { logger } from '../core/logger'
 
 let _skills = []
 let _promptFragment = ''

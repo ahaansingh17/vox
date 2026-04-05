@@ -1,10 +1,12 @@
-import { configGet, configSet, configDelete, configGetAll } from '@vox-ai-app/storage/config'
-import { app } from 'electron'
-import { join } from 'path'
+import {
+  getSettingJson,
+  setSetting,
+  deleteSetting,
+  getAllSettings
+} from '@vox-ai-app/storage/settings'
+import { getDb } from './db.js'
 
-const getStorePath = () => join(app.getPath('userData'), 'store.json')
-
-export const storeGet = (key) => configGet(getStorePath(), key)
-export const storeSet = (key, value) => configSet(getStorePath(), key, value)
-export const storeDelete = (key) => configDelete(getStorePath(), key)
-export const storeGetAll = () => configGetAll(getStorePath())
+export const storeGet = (key) => getSettingJson(getDb(), key)
+export const storeSet = (key, value) => setSetting(getDb(), key, value)
+export const storeDelete = (key) => deleteSetting(getDb(), key)
+export const storeGetAll = () => getAllSettings(getDb())

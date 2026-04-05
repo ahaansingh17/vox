@@ -1,10 +1,15 @@
 import { connectMcpServer as _connect, setLogger } from '@vox-ai-app/mcp/client'
-import { storeGet, storeSet } from '../storage/store'
-import { logger } from '../logger'
+import {
+  listMcpServers as dbListMcpServers,
+  createMcpServer,
+  updateMcpServer as dbUpdateMcpServer,
+  deleteMcpServer,
+  getMcpServer
+} from '@vox-ai-app/storage/mcp-servers'
+import { getDb } from '../storage/db'
+import { logger } from '../core/logger'
 
 setLogger(logger)
-
-const STORE_KEY = 'mcpServers'
 
 const connections = new Map()
 let _toolInvalidationCallback = null
@@ -18,38 +23,29 @@ function invalidateToolCache() {
 }
 
 export function listMcpServers() {
-  return storeGet(STORE_KEY) || []
-}
-
-function saveServers(servers) {
-  storeSet(STORE_KEY, servers)
+  return dbListMcpServers(getDb())
 }
 
 export function addMcpServer(server) {
-  const servers = listMcpServers()
-  if (servers.find((s) => s.id === server.id))
+  const db = getDb()
+  if (server.id && getMcpServer(db, server.id))
     throw Object.assign(new Error('Server already exists'), { code: 'DUPLICATE' })
-  servers.push(server)
-  saveServers(servers)
-  return server
+  return createMcpServer(db, server)
 }
 
 export function removeMcpServer(id) {
   disconnectMcpServer(id).catch(() => {})
-  saveServers(listMcpServers().filter((s) => s.id !== id))
+  deleteMcpServer(getDb(), id)
 }
 
 export function updateMcpServer(id, patch) {
-  const servers = listMcpServers()
-  const idx = servers.findIndex((s) => s.id === id)
-  if (idx < 0) throw Object.assign(new Error('Server not found'), { code: 'NOT_FOUND' })
-  servers[idx] = { ...servers[idx], ...patch }
-  saveServers(servers)
-  return servers[idx]
+  const result = dbUpdateMcpServer(getDb(), id, patch)
+  if (!result) throw Object.assign(new Error('Server not found'), { code: 'NOT_FOUND' })
+  return result
 }
 
 export async function connectMcpServer(id) {
-  const server = listMcpServers().find((s) => s.id === id)
+  const server = getMcpServer(getDb(), id)
   if (!server) throw Object.assign(new Error('Server not found'), { code: 'NOT_FOUND' })
 
   await disconnectMcpServer(id)

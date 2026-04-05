@@ -1,5 +1,6 @@
 import { getDeclarations } from '@vox-ai-app/tools/registry'
-import { storeGet } from '../storage/store'
+import { listTools } from '@vox-ai-app/storage/tools'
+import { getDb } from '../storage/db'
 import { definition as spawnDef } from './spawn.tool'
 import { getMcpToolDefinitions } from '../mcp/mcp.service'
 
@@ -162,8 +163,7 @@ function buildToolDefinitions() {
 
   const hasCustomTools = (() => {
     try {
-      const ct = storeGet('customTools') || []
-      return ct.some((t) => t.is_enabled !== false && t.name)
+      return listTools(getDb(), true).length > 0
     } catch {
       return false
     }

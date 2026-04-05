@@ -14,20 +14,18 @@ const HISTORICAL_POLL_MS = 30000
 function normalizeHistoricalTask(row) {
   const ts = row.created_at || new Date().toISOString()
   const doneAt = row.completed_at || ''
-  const isFailed = row.status === 'failed' || row.status === 'aborted'
 
   return {
     taskId: String(row.id || ''),
     status: String(row.status || 'running'),
     completedCount: 0,
     currentPlan: row.current_plan || '',
-    message: row.abort_reason || '',
+    error: row.abort_reason || '',
     resultPreview: '',
     spawnRequestedAt: ts,
     spawnedAt: ts,
     startedAt: ts,
-    completedAt: isFailed ? '' : doneAt,
-    failedAt: isFailed ? doneAt : '',
+    completedAt: doneAt,
     spawnInstructions: row.instructions || '',
     instructions: row.instructions || '',
     spawnContext: '',
@@ -170,8 +168,7 @@ export function useTaskHistory(userId) {
         instructions: backfilledInstructions,
         currentPlan: live.currentPlan || dbTask.currentPlan,
         spawnedAt: live.spawnedAt || dbTask.spawnedAt,
-        completedAt: live.completedAt || dbTask.completedAt,
-        failedAt: live.failedAt || dbTask.failedAt
+        completedAt: live.completedAt || dbTask.completedAt
       }
       const effectiveStatus = computeEffectiveStatus(merged.status, dbTask)
       if (effectiveStatus !== merged.status) merged.status = effectiveStatus
