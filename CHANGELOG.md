@@ -7,6 +7,26 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [2.1.1] - 2026-04-06
+
+### Fixed
+
+- **llama-server SIGABRT on all non-dev machines** — the downloaded llama-server binary (b8635) depends on ~24 companion shared libraries (libllama, libggml, libggml-metal, etc.) that ship in the release archive. Only the binary was being extracted; the dylibs were discarded. Missing libraries caused immediate SIGABRT on launch. Worked on dev machines only because Homebrew's llama-server is self-contained.
+- **Download integrity** — added size verification after streaming download. Incomplete downloads now throw instead of silently installing a corrupt binary.
+- **Binary validation** — runs `--version` after install to verify the binary is functional before writing the version stamp. Failed validation auto-purges and gives actionable macOS Privacy & Security guidance.
+- **SIGABRT auto-recovery** — tracks rapid consecutive SIGABRT crashes. After 3 instant crashes, purges the entire installation and prompts user to check Gatekeeper settings.
+
+### Changed
+
+- **Extracted `binary.manager.js`** — split binary lifecycle (download, install, validate, purge) out of `server.js` into a dedicated module. Single `purge()` function replaces duplicated cleanup logic. Version-stamped directory (`bin/b8635/`) isolates versions cleanly.
+- **Removed Homebrew fallback** — `findBinary()` no longer falls back to `/opt/homebrew/bin/llama-server`. All users get the same managed binary, eliminating "works on my machine" version mismatches.
+
+### Added
+
+- **13 tests for `binary.manager.js`** — covers resolve, purge, purgeAllVersions, ensure (download, install, dylib copy, validation failure, HTTP errors, incomplete downloads).
+
+---
+
 ## [2.1.0] - 2026-04-05
 
 ### Fixed

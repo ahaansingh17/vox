@@ -1,182 +1,23 @@
 import { spawn, execSync } from 'child_process'
-import { join } from 'path'
-import {
-  existsSync,
-  mkdirSync,
-  chmodSync,
-  writeFileSync,
-  readFileSync,
-  createWriteStream,
-  renameSync,
-  rmSync
-} from 'fs'
-import { app } from 'electron'
 import { logger } from '../../core/logger'
 import { emitAll } from '../../ipc/shared'
+import { ensure as ensureBinary, purge as purgeBinary } from './binary.manager.js'
+
+export { ensureBinary }
 
 const DEFAULT_PORT = 19741
 const HEALTH_POLL_MS = 300
 const MAX_HEALTH_POLLS = 400
-const LLAMA_SERVER_VERSION = 'b8635'
+const MAX_INSTANT_CRASHES = 3
+const INSTANT_CRASH_THRESHOLD_MS = 2000
 
 let _process = null
 let _port = DEFAULT_PORT
 let _modelPath = null
 let _ready = false
 let _onProgress = null
-
-function getBinDir() {
-  const dir = join(app.getPath('userData'), 'bin')
-  mkdirSync(dir, { recursive: true })
-  return dir
-}
-
-function getManagedBinaryPath() {
-  return join(getBinDir(), 'llama-server')
-}
-
-function getVersionFilePath() {
-  return join(getBinDir(), 'llama-server.version')
-}
-
-function getInstalledVersion() {
-  try {
-    return readFileSync(getVersionFilePath(), 'utf-8').trim()
-  } catch {
-    return null
-  }
-}
-
-function getAssetName() {
-  const arch = process.arch
-  if (process.platform === 'darwin') {
-    return arch === 'arm64'
-      ? `llama-${LLAMA_SERVER_VERSION}-bin-macos-arm64.tar.gz`
-      : `llama-${LLAMA_SERVER_VERSION}-bin-macos-x64.tar.gz`
-  }
-  if (process.platform === 'linux') {
-    return arch === 'arm64'
-      ? `llama-${LLAMA_SERVER_VERSION}-bin-ubuntu-arm64.tar.gz`
-      : `llama-${LLAMA_SERVER_VERSION}-bin-ubuntu-x64.tar.gz`
-  }
-  return arch === 'arm64'
-    ? `llama-${LLAMA_SERVER_VERSION}-bin-win-cpu-arm64.zip`
-    : `llama-${LLAMA_SERVER_VERSION}-bin-win-cpu-x64.zip`
-}
-
-function getDownloadUrl() {
-  return `https://github.com/ggml-org/llama.cpp/releases/download/${LLAMA_SERVER_VERSION}/${getAssetName()}`
-}
-
-function findBinary() {
-  const bundled = join(
-    app.getAppPath().replace('app.asar', 'app.asar.unpacked'),
-    'resources',
-    'llama-server'
-  )
-  if (existsSync(bundled)) return bundled
-
-  const managed = getManagedBinaryPath()
-  if (existsSync(managed) && getInstalledVersion() === LLAMA_SERVER_VERSION) return managed
-
-  const brewArm = '/opt/homebrew/bin/llama-server'
-  if (existsSync(brewArm)) return brewArm
-
-  const brewIntel = '/usr/local/bin/llama-server'
-  if (existsSync(brewIntel)) return brewIntel
-
-  return null
-}
-
-export async function ensureBinary() {
-  const existing = findBinary()
-  if (existing) return existing
-
-  logger.info(`[llm.server] llama-server not found, downloading ${LLAMA_SERVER_VERSION}...`)
-  emitAll('engine:status', { status: 'downloading', version: LLAMA_SERVER_VERSION })
-
-  const binDir = getBinDir()
-  const binaryPath = getManagedBinaryPath()
-  const assetName = getAssetName()
-  const tmpArchive = join(binDir, assetName + '.tmp')
-  const tmpExtract = join(binDir, 'extract-tmp')
-
-  try {
-    const url = getDownloadUrl()
-    const resp = await fetch(url, { redirect: 'follow' })
-    if (!resp.ok) throw new Error(`Failed to download llama-server: HTTP ${resp.status}`)
-
-    const totalBytes = parseInt(resp.headers.get('content-length') || '0', 10)
-    let downloaded = 0
-
-    const fileStream = createWriteStream(tmpArchive)
-    const reader = resp.body.getReader()
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      fileStream.write(Buffer.from(value))
-      downloaded += value.byteLength
-      if (totalBytes > 0) {
-        const pct = Math.round((downloaded / totalBytes) * 100)
-        emitAll('engine:progress', { percent: pct, downloadedBytes: downloaded, totalBytes })
-      }
-    }
-
-    fileStream.end()
-    await new Promise((resolve, reject) => {
-      fileStream.on('finish', resolve)
-      fileStream.on('error', reject)
-      if (fileStream.writableFinished) resolve()
-    })
-
-    mkdirSync(tmpExtract, { recursive: true })
-
-    if (assetName.endsWith('.tar.gz')) {
-      execSync(`tar xzf "${tmpArchive}" -C "${tmpExtract}"`)
-    } else {
-      execSync(`unzip -o "${tmpArchive}" -d "${tmpExtract}"`)
-    }
-
-    const found = execSync(`find "${tmpExtract}" -name "llama-server" -type f | head -1`, {
-      encoding: 'utf-8'
-    }).trim()
-    if (!found) throw new Error('llama-server binary not found in archive')
-
-    if (existsSync(binaryPath)) rmSync(binaryPath)
-    renameSync(found, binaryPath)
-    chmodSync(binaryPath, 0o755)
-
-    if (process.platform === 'darwin') {
-      try {
-        execSync(`xattr -dr com.apple.quarantine "${binaryPath}"`)
-      } catch {
-        /* ok */
-      }
-    }
-
-    writeFileSync(getVersionFilePath(), LLAMA_SERVER_VERSION)
-
-    logger.info('[llm.server] Installed llama-server', LLAMA_SERVER_VERSION, 'at', binaryPath)
-    emitAll('engine:status', { status: 'ready', version: LLAMA_SERVER_VERSION })
-    return binaryPath
-  } catch (err) {
-    logger.error('[llm.server] Binary install failed:', err.message)
-    emitAll('engine:status', { status: 'error', error: err.message })
-    throw err
-  } finally {
-    try {
-      rmSync(tmpArchive, { force: true })
-    } catch {
-      /* ok */
-    }
-    try {
-      rmSync(tmpExtract, { recursive: true, force: true })
-    } catch {
-      /* ok */
-    }
-  }
-}
+let _instantCrashCount = 0
+let _lastStartTime = 0
 
 export function getPort() {
   return _port
@@ -192,6 +33,14 @@ export function isReady() {
 
 export function getModelPath() {
   return _modelPath
+}
+
+export function onLoadProgress(handler) {
+  _onProgress = handler
+}
+
+export function getProcess() {
+  return _process
 }
 
 async function waitForHealth() {
@@ -223,6 +72,23 @@ async function waitForHealth() {
   }
 }
 
+function killStaleProcessOnPort(port) {
+  try {
+    const pids = execSync(`lsof -ti :${port}`, { encoding: 'utf-8' }).trim()
+    if (!pids) return
+    logger.warn(`[llm.server] Killing stale process(es) on port ${port}: ${pids}`)
+    for (const pid of pids.split('\n').filter(Boolean)) {
+      try {
+        process.kill(Number(pid), 'SIGKILL')
+      } catch {
+        /* pid already gone */
+      }
+    }
+  } catch {
+    // no process on port
+  }
+}
+
 export async function startServer(modelPath, { contextSize = 32768, nGpuLayers = -1, port } = {}) {
   if (_process) {
     await stopServer()
@@ -232,22 +98,8 @@ export async function startServer(modelPath, { contextSize = 32768, nGpuLayers =
   _modelPath = modelPath
   _ready = false
 
-  try {
-    const pids = execSync(`lsof -ti :${_port}`, { encoding: 'utf-8' }).trim()
-    if (pids) {
-      logger.warn(`[llm.server] Killing stale process(es) on port ${_port}: ${pids}`)
-      for (const pid of pids.split('\n').filter(Boolean)) {
-        try {
-          process.kill(Number(pid), 'SIGKILL')
-        } catch {
-          /* pid already gone */
-        }
-      }
-      await new Promise((r) => setTimeout(r, 300))
-    }
-  } catch {
-    // no process on port — expected
-  }
+  killStaleProcessOnPort(_port)
+  await new Promise((r) => setTimeout(r, 300))
 
   const binary = await ensureBinary()
 
@@ -270,6 +122,7 @@ export async function startServer(modelPath, { contextSize = 32768, nGpuLayers =
   ]
 
   logger.info('[llm.server] Starting:', binary, args.join(' '))
+  _lastStartTime = Date.now()
 
   _process = spawn(binary, args, {
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -301,9 +154,28 @@ export async function startServer(modelPath, { contextSize = 32768, nGpuLayers =
   })
 
   _process.on('exit', (code, signal) => {
-    logger.info(`[llm.server] Exited code=${code} signal=${signal}`)
+    const elapsed = Date.now() - _lastStartTime
+    logger.info(`[llm.server] Exited code=${code} signal=${signal} after ${elapsed}ms`)
     _process = null
     _ready = false
+
+    if (signal === 'SIGABRT' && elapsed < INSTANT_CRASH_THRESHOLD_MS) {
+      _instantCrashCount++
+      logger.warn(
+        `[llm.server] Instant SIGABRT crash #${_instantCrashCount}/${MAX_INSTANT_CRASHES}`
+      )
+      if (_instantCrashCount >= MAX_INSTANT_CRASHES) {
+        logger.error('[llm.server] Repeated SIGABRT — purging binary for re-download')
+        _instantCrashCount = 0
+        purgeBinary()
+        emitAll('engine:status', {
+          status: 'error',
+          error:
+            'The AI engine crashed repeatedly (SIGABRT). This usually means macOS is blocking the binary. ' +
+            'Open System Settings > Privacy & Security and click "Allow Anyway" for llama-server, then restart Vox.'
+        })
+      }
+    }
   })
 
   _process.on('error', (err) => {
@@ -340,12 +212,4 @@ export async function stopServer() {
       resolve()
     })
   })
-}
-
-export function onLoadProgress(handler) {
-  _onProgress = handler
-}
-
-export function getProcess() {
-  return _process
 }

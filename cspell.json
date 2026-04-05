@@ -19,6 +19,8 @@
     "KEEPTTL",
     "KHTML",
     "libc",
+    "libggml",
+    "libllama",
     "libwebp",
     "lifecyle",
     "Neue",
@@ -121,6 +123,7 @@
     "xoxb",
     "silero",
     "xapp",
-    "Xenova"
+    "Xenova",
+    "GGML"
   ]
 }
