@@ -3,6 +3,7 @@ import { getBaseUrl, isReady } from './server.js'
 export async function chatCompletion({
   messages,
   tools,
+  toolChoice,
   stream = true,
   temperature = 0.7,
   maxTokens = 4096,
@@ -27,7 +28,7 @@ export async function chatCompletion({
         parameters: t.parameters || { type: 'object', properties: {} }
       }
     }))
-    body.tool_choice = 'auto'
+    body.tool_choice = toolChoice || 'auto'
   }
 
   const resp = await fetch(`${getBaseUrl()}/v1/chat/completions`, {
@@ -82,6 +83,7 @@ async function* parseSSEStream(body, signal) {
 export async function* streamChat({
   messages,
   tools,
+  toolChoice,
   temperature = 0.7,
   maxTokens = 4096,
   signal
@@ -89,6 +91,7 @@ export async function* streamChat({
   const chunks = await chatCompletion({
     messages,
     tools,
+    toolChoice,
     stream: true,
     temperature,
     maxTokens,

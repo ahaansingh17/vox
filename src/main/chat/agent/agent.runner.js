@@ -257,26 +257,25 @@ export async function runAgentLoop({
       try {
         let roundText = ''
         const toolCalls = []
+
         const isPlanning = !state.planningComplete
 
         for await (const event of streamChat({
           messages,
           tools: iterationToolDefs,
+          toolChoice: isPlanning ? 'required' : 'auto',
           signal
         })) {
           if (event.type === 'text') {
-            const cleaned = event.content.replace(/<think>[\s\S]*?<\/think>/g, '')
-            if (cleaned) {
-              roundText += cleaned
-              pendingThought += cleaned
-              if (!isPlanning) emit({ type: 'text', content: cleaned })
-            }
+            roundText += event.content
+            pendingThought += event.content
+            if (!isPlanning) emit({ type: 'text', content: event.content })
           } else if (event.type === 'tool_call') {
             toolCalls.push(event)
           }
         }
 
-        if (toolCalls.length === 0 && isPlanning && roundText.trim()) {
+        if (toolCalls.length === 0 && !state.planningComplete && roundText.trim()) {
           const parsed = tryParseJournalJson(roundText)
           if (parsed) {
             try {

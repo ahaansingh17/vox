@@ -347,7 +347,6 @@ function runTask({ taskId, instructions, context, toolDefinitions }) {
     } else if (
       event.type === 'tool_call' ||
       event.type === 'tool_result' ||
-      event.type === 'text' ||
       event.type === 'thought'
     ) {
       recordActivity(taskId, event)
