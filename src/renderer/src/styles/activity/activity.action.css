@@ -190,3 +190,73 @@
   white-space: pre-wrap;
   word-break: break-all;
 }
+
+.activity-journal-details {
+  gap: 8px;
+}
+
+.activity-journal-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.activity-journal-section-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--vox-text-muted);
+}
+
+.activity-journal-label-blocker {
+  color: color-mix(in srgb, var(--color-danger, #e53935) 70%, var(--vox-text-muted));
+}
+
+.activity-journal-section-text {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--vox-text-secondary);
+  line-height: 1.4;
+}
+
+.activity-journal-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.activity-journal-list-item {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 0.72rem;
+  color: var(--vox-text-secondary);
+  line-height: 1.4;
+}
+
+.activity-journal-list-item svg {
+  flex-shrink: 0;
+  position: relative;
+  top: 1px;
+}
+
+.activity-journal-list-done svg {
+  color: color-mix(in srgb, var(--color-success, #43a047) 70%, var(--vox-text-secondary));
+}
+
+.activity-journal-list-blocker svg {
+  color: color-mix(in srgb, var(--color-danger, #e53935) 70%, var(--vox-text-secondary));
+}
+
+.activity-journal-done {
+  padding-top: 4px;
+  border-top: 1px solid color-mix(in srgb, var(--vox-text-muted) 15%, transparent);
+}
+
+.activity-journal-done .activity-journal-section-label {
+  color: color-mix(in srgb, var(--color-success, #43a047) 70%, var(--vox-text-muted));
+}

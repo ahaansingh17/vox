@@ -25,7 +25,7 @@ function ActivityDetail({ taskId, liveTask, onBack, onAbort, onResume, taskEvent
     label,
     liveCurrentPlan,
     latestThought,
-    groupedPairs
+    timeline
   } = useActivityDetailState({ taskId, liveTask, taskEvents })
   const [busy, setBusy] = useState(false)
 
@@ -138,18 +138,18 @@ function ActivityDetail({ taskId, liveTask, onBack, onAbort, onResume, taskEvent
                 i === steps.length - 1 &&
                 !finalResult &&
                 !errorMsg &&
-                !groupedPairs.length &&
+                !timeline.length &&
                 effectiveStatus !== 'running'
               return <StepItem key={step.step_id || i} step={step} isLast={isLastStep} />
             })}
-            {groupedPairs.map((pair, idx) => (
-              <ActionItem
-                key={idx}
-                call={pair.call}
-                result={pair.result}
-                isLast={false}
-                repeatCount={pair.repeatCount}
-              />
+            {timeline.map((item, idx) => (
+                <ActionItem
+                  key={`action-${idx}`}
+                  call={item.call}
+                  result={item.result}
+                  isLast={false}
+                  repeatCount={item.repeatCount}
+                />
             ))}
             {isRunning && (
               <TimelineMarker

@@ -8,14 +8,6 @@ import {
   TASK_STATUS_LABEL
 } from '../utils/task.utils'
 
-function getLastProgressTime(taskEvents, isRunning) {
-  if (!isRunning) return null
-  const progressEvents = taskEvents.filter((event) => event.type === 'task.progress')
-  if (!progressEvents.length) return null
-  const lastEvent = progressEvents[progressEvents.length - 1]
-  return lastEvent?.at || lastEvent?.createdAt || null
-}
-
 function getLatestThought(taskEvents, isRunning) {
   if (!isRunning) return ''
   return String(
@@ -23,56 +15,111 @@ function getLatestThought(taskEvents, isRunning) {
   ).trim()
 }
 
-function buildGroupedPairs(taskEvents, lastProgressTime, isRunning) {
+function normalizeEvent(e) {
+  let name = ''
+  if (typeof e.name === 'string') name = e.name
+  else if (typeof e.data.name === 'string') name = e.data.name
+
+  let plan = ''
+  if (typeof e.plan === 'string') plan = e.plan
+  else if (typeof e.data.plan === 'string') plan = e.data.plan
+
+  return {
+    id: e.id,
+    taskId: e.taskId,
+    type: e.type,
+    name,
+    createdAt: e.createdAt,
+    result: e.result,
+    plan,
+    done: e.data.done === true,
+    data: e.data
+  }
+}
+
+function getExitCode(resultEvent) {
+  if (resultEvent == null) return undefined
+  const r = resultEvent.result
+  if (r == null || typeof r !== 'object') return undefined
+  return r.exitCode
+}
+
+function buildTimeline(taskEvents) {
   if (taskEvents.length === 0) return []
 
-  const calls = taskEvents.filter((event) => {
-    if (event.type !== 'tool_call' && event.type !== 'task.request') return false
-    if (!isRunning || !lastProgressTime) return true
-    const eventTime = event.at || event.createdAt
-    return eventTime && eventTime > lastProgressTime
-  })
-
-  const results = taskEvents.filter((event) => {
-    if (event.type !== 'tool_result') return false
-    if (!lastProgressTime) return true
-    const eventTime = event.at || event.createdAt
-    return eventTime && eventTime > lastProgressTime
-  })
+  const normalized = taskEvents.map(normalizeEvent)
+  const calls = normalized.filter((e) => e.type === 'tool_call' || e.type === 'task.request')
+  const results = normalized.filter((e) => e.type === 'tool_result')
+  const journals = normalized.filter((e) => e.type === 'journal')
 
   const usedResultIds = new Set()
-  const groups = []
+  const raw = []
 
   for (const call of calls) {
-    const callName = call.name || call.data?.name || ''
-    const matchedResult = results.find(
-      (result) => !usedResultIds.has(result.id) && (result.name || result.data?.name) === callName
-    )
-    if (matchedResult) usedResultIds.add(matchedResult.id)
+    const matched = results.find((r) => !usedResultIds.has(r.id) && r.name === call.name)
+    if (matched) usedResultIds.add(matched.id)
 
-    const pair = { call, result: matchedResult || null }
-    const toolResult = pair.result?.result
-    const exitCode = toolResult && typeof toolResult === 'object' ? toolResult.exitCode : undefined
-    const isFailing = exitCode !== undefined && exitCode !== 0
-
-    const lastGroup = groups[groups.length - 1]
-    const lastName = lastGroup?.call?.name || lastGroup?.call?.data?.name || ''
-    const lastToolResult = lastGroup?.result?.result
-    const lastExitCode =
-      lastToolResult && typeof lastToolResult === 'object' ? lastToolResult.exitCode : undefined
-    const lastFailing = lastExitCode !== undefined && lastExitCode !== 0
-
-    if (lastGroup && callName === lastName && isFailing && lastFailing) {
-      lastGroup.repeatCount = (lastGroup.repeatCount || 1) + 1
-      lastGroup.call = pair.call
-      lastGroup.result = pair.result
-      continue
-    }
-
-    groups.push({ ...pair, repeatCount: 1 })
+    raw.push({
+      call,
+      result: matched,
+      repeatCount: 1,
+      at: call.createdAt
+    })
   }
 
-  return groups
+  for (const j of journals) {
+    const d = j.data
+    raw.push({
+      call: {
+        name: 'update_journal',
+        type: 'tool_call',
+        args: {
+          understanding: d.understanding,
+          currentPlan: d.currentPlan,
+          completed: d.completed,
+          blockers: d.blockers,
+          discoveries: d.discoveries,
+          done: d.done === true,
+          doneReason: d.doneReason
+        },
+        data: d
+      },
+      result: null,
+      at: j.createdAt,
+      repeatCount: 1
+    })
+  }
+
+  raw.sort((a, b) => a.at.localeCompare(b.at))
+
+  const items = []
+  for (const entry of raw) {
+    const last = items.length > 0 ? items[items.length - 1] : null
+    if (last !== null && entry.call.name === last.call.name) {
+      const exitCode = getExitCode(entry.result)
+      const isFailing = exitCode !== undefined && exitCode !== 0
+      const lastExitCode = getExitCode(last.result)
+      const lastFailing = lastExitCode !== undefined && lastExitCode !== 0
+
+      if (entry.call.name === 'update_journal') {
+        const entryPlan = entry.call.args.currentPlan
+        const lastPlan = last.call.args.currentPlan
+        if (entryPlan === lastPlan) {
+          last.repeatCount += 1
+          continue
+        }
+      } else if (isFailing && lastFailing) {
+        last.repeatCount += 1
+        last.call = entry.call
+        last.result = entry.result
+        continue
+      }
+    }
+
+    items.push(entry)
+  }
+
+  return items
 }
 
 export function useActivityDetailState({ taskId, liveTask, taskEvents }) {
@@ -104,15 +151,7 @@ export function useActivityDetailState({ taskId, liveTask, taskEvents }) {
     [effectiveTaskEvents, isRunning]
   )
 
-  const lastProgressTime = useMemo(
-    () => getLastProgressTime(effectiveTaskEvents, isRunning),
-    [effectiveTaskEvents, isRunning]
-  )
-
-  const groupedPairs = useMemo(
-    () => buildGroupedPairs(effectiveTaskEvents, lastProgressTime, isRunning),
-    [effectiveTaskEvents, lastProgressTime, isRunning]
-  )
+  const timeline = useMemo(() => buildTimeline(effectiveTaskEvents), [effectiveTaskEvents])
 
   return {
     fetched,
@@ -133,6 +172,6 @@ export function useActivityDetailState({ taskId, liveTask, taskEvents }) {
     label,
     liveCurrentPlan,
     latestThought,
-    groupedPairs
+    timeline
   }
 }

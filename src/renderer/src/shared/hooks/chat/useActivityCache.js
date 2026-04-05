@@ -59,8 +59,8 @@ export const useActivityCache = () => {
                 id: `live-${Date.now()}-${Math.random().toString(36).slice(2)}`,
                 taskId: data.taskId,
                 type,
-                name: data.name || null,
-                result: data.result || null,
+                name: typeof data.name === 'string' ? data.name : null,
+                result: data.result !== undefined ? data.result : null,
                 createdAt: new Date().toISOString(),
                 data
               },

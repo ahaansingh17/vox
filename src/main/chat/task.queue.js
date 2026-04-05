@@ -349,7 +349,9 @@ function runTask({ taskId, instructions, context, toolDefinitions }) {
       event.type === 'tool_result' ||
       event.type === 'thought'
     ) {
-      recordActivity(taskId, event)
+      if (event.name !== 'update_journal') {
+        recordActivity(taskId, event)
+      }
     }
   })
 

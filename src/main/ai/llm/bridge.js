@@ -82,6 +82,12 @@ export function getLlmStatus() {
 
 export async function loadModel(modelPath) {
   stopHealthCheck()
+
+  _chatController?.abort()
+  for (const [, controller] of agentControllers) {
+    controller.abort()
+  }
+
   _status = { ready: false, modelPath, loading: true, error: null }
   emitAll('models:load-progress', { percent: 0 })
 

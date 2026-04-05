@@ -16,7 +16,6 @@ const JOURNAL_TOOL_NAME = 'update_journal'
 const STALL_GIVE_UP_THRESHOLD = 6
 const MAX_COMPRESSION_ATTEMPTS = 2
 const MAX_ITERATIONS = 50
-const MAX_PLANNING_ITERATIONS = 5
 const MAX_NO_PROGRESS_ITERATIONS = 3
 
 function isContextLengthError(err) {
@@ -79,45 +78,6 @@ function summarizeResult(result) {
   if (result.exitCode !== undefined)
     return result.exitCode === 0 ? 'success' : `exit ${result.exitCode}`
   return 'completed'
-}
-
-const JOURNAL_KEYS = new Set([
-  'understanding',
-  'thoughts',
-  'discoveries',
-  'completed',
-  'currentPlan',
-  'blockers',
-  'clearBlockers',
-  'done',
-  'doneReason'
-])
-
-function tryParseJournalJson(text) {
-  const trimmed = text.trim()
-  const start = trimmed.indexOf('{')
-  if (start === -1) return null
-  let depth = 0
-  let end = -1
-  for (let i = start; i < trimmed.length; i++) {
-    if (trimmed[i] === '{') depth++
-    else if (trimmed[i] === '}') depth--
-    if (depth === 0) {
-      end = i
-      break
-    }
-  }
-  if (end === -1) return null
-  try {
-    const obj = JSON.parse(trimmed.slice(start, end + 1))
-    if (typeof obj !== 'object' || Array.isArray(obj)) return null
-    const keys = Object.keys(obj)
-    if (keys.length === 0) return null
-    if (!keys.some((k) => JOURNAL_KEYS.has(k))) return null
-    return obj
-  } catch {
-    return null
-  }
 }
 
 function selectPrompt(state, journal) {
@@ -229,11 +189,11 @@ export async function runAgentLoop({
   let pendingCorrection = null
   let compressionAttempts = 0
   let iterations = 0
-  let planningIterations = 0
   let noProgressCount = 0
   let lastJournalSnapshot = JSON.stringify(journal)
   let repetitionWarnings = 0
   let realToolCallCount = 0
+  let consecutiveJournalCount = 0
 
   while (true) {
     if (signal?.aborted) throw new Error('Task cancelled')
@@ -250,7 +210,6 @@ export async function runAgentLoop({
 
     messages.push({ role: 'user', content: iterationPrompt })
 
-    const iterationToolDefs = state.planningComplete ? tools.definitions : [journalTool.definition]
     let pendingThought = ''
 
     while (true) {
@@ -258,36 +217,17 @@ export async function runAgentLoop({
         let roundText = ''
         const toolCalls = []
 
-        const isPlanning = !state.planningComplete
-
         for await (const event of streamChat({
           messages,
-          tools: iterationToolDefs,
-          toolChoice: isPlanning ? 'required' : 'auto',
+          tools: tools.definitions,
           signal
         })) {
           if (event.type === 'text') {
             roundText += event.content
             pendingThought += event.content
-            if (!isPlanning) emit({ type: 'text', content: event.content })
+            emit({ type: 'text', content: event.content })
           } else if (event.type === 'tool_call') {
             toolCalls.push(event)
-          }
-        }
-
-        if (toolCalls.length === 0 && !state.planningComplete && roundText.trim()) {
-          const parsed = tryParseJournalJson(roundText)
-          if (parsed) {
-            try {
-              await tools.execute(JOURNAL_TOOL_NAME, parsed, { signal })
-              emit({ type: 'tool_call', name: JOURNAL_TOOL_NAME, args: parsed })
-              emit({ type: 'tool_result', name: JOURNAL_TOOL_NAME, result: 'ok' })
-              messages.push({ role: 'assistant', content: roundText })
-              messages.push({ role: 'tool', content: 'Journal updated.' })
-              continue
-            } catch {
-              /* fall through to normal handling */
-            }
           }
         }
 
@@ -322,7 +262,15 @@ export async function runAgentLoop({
           const serialized = typeof result === 'string' ? result : JSON.stringify(result)
           state.lastToolResult = serialized
 
-          if (tc.name !== JOURNAL_TOOL_NAME) {
+          if (tc.name === JOURNAL_TOOL_NAME) {
+            consecutiveJournalCount++
+            if (consecutiveJournalCount >= 3) {
+              pendingCorrection =
+                (pendingCorrection ? pendingCorrection + '\n\n' : '') +
+                'You have called update_journal multiple times without executing any real tool. Execute a tool now or mark done=true if the task is complete.'
+            }
+          } else {
+            consecutiveJournalCount = 0
             realToolCallCount++
             repetitionDetector.record(tc.name, tc.args, serialized)
             const warnings = validateToolResult(tc.name, serialized)
@@ -396,19 +344,6 @@ export async function runAgentLoop({
     }
 
     updatePlanningState(state, journal)
-
-    if (!state.planningComplete) {
-      planningIterations++
-      if (planningIterations >= MAX_PLANNING_ITERATIONS) {
-        emit({
-          type: 'thought',
-          content: 'Unable to form a plan after multiple attempts. Stopping.'
-        })
-        journal.done = true
-        journal.doneReason = 'Failed to create an execution plan for this task.'
-        break
-      }
-    }
 
     if (journal.done && realToolCallCount === 0) {
       journal.done = false

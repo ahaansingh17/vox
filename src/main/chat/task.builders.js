@@ -71,15 +71,37 @@ export function buildActivityEvent(taskId, event) {
   if (!VALID_ACTIVITY_TYPES.has(type)) {
     throw new Error(`Unknown task activity type: "${event.type}"`)
   }
+
+  const journal = event.journal
+  let plan = null
+  if (journal && typeof journal.currentPlan === 'string') plan = journal.currentPlan
+
+  let result = null
+  if (event.type === 'tool_result' && event.result !== undefined) result = event.result
+
+  let data = { taskId, ...event }
+  if (event.type === 'journal_update' && journal) {
+    data = {
+      taskId,
+      understanding: journal.understanding,
+      currentPlan: journal.currentPlan,
+      completed: journal.completed,
+      blockers: journal.blockers,
+      discoveries: journal.discoveries,
+      done: journal.done === true,
+      doneReason: journal.doneReason
+    }
+  }
+
   return {
     id: `activity-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     taskId,
     type,
     name: event.name,
     args: event.type === 'tool_call' ? JSON.stringify(event.args) : null,
-    result: event.type === 'tool_result' ? (event.result ?? null) : null,
-    plan: event.journal?.currentPlan ?? null,
+    result,
+    plan,
     createdAt: new Date().toISOString(),
-    data: { taskId, ...event }
+    data
   }
 }

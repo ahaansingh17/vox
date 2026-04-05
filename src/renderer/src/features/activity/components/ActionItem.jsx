@@ -1,11 +1,14 @@
 import { memo, useState } from 'react'
 import {
   BookOpen,
+  Check,
   ChevronDown,
   ChevronRight,
   FileText,
   Globe,
+  Lightbulb,
   Monitor,
+  OctagonAlert,
   PenLine,
   Search,
   Terminal,
@@ -98,6 +101,75 @@ function GenericDetails({ argEntries, result: rawResult }) {
   )
 }
 
+function JournalDetails({ argsObj }) {
+  const understanding = typeof argsObj.understanding === 'string' ? argsObj.understanding : ''
+  const plan = typeof argsObj.currentPlan === 'string' ? argsObj.currentPlan : ''
+  const completed = Array.isArray(argsObj.completed) ? argsObj.completed : []
+  const blockers = Array.isArray(argsObj.blockers) ? argsObj.blockers : []
+  const discoveries = Array.isArray(argsObj.discoveries) ? argsObj.discoveries : []
+  const done = argsObj.done === true
+  const doneReason = typeof argsObj.doneReason === 'string' ? argsObj.doneReason : ''
+
+  return (
+    <div className="activity-action-details activity-journal-details">
+      {understanding && (
+        <div className="activity-journal-section">
+          <span className="activity-journal-section-label">Understanding</span>
+          <p className="activity-journal-section-text">{understanding}</p>
+        </div>
+      )}
+      {plan && (
+        <div className="activity-journal-section">
+          <span className="activity-journal-section-label">Plan</span>
+          <p className="activity-journal-section-text">{plan}</p>
+        </div>
+      )}
+      {completed.length > 0 && (
+        <div className="activity-journal-section">
+          <span className="activity-journal-section-label">Completed</span>
+          <ul className="activity-journal-list">
+            {completed.map((item, i) => (
+              <li key={i} className="activity-journal-list-item activity-journal-list-done">
+                <Check size={10} /> {String(item)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {blockers.length > 0 && (
+        <div className="activity-journal-section">
+          <span className="activity-journal-section-label activity-journal-label-blocker">Blockers</span>
+          <ul className="activity-journal-list">
+            {blockers.map((item, i) => (
+              <li key={i} className="activity-journal-list-item activity-journal-list-blocker">
+                <OctagonAlert size={10} /> {String(item)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {discoveries.length > 0 && (
+        <div className="activity-journal-section">
+          <span className="activity-journal-section-label">Discoveries</span>
+          <ul className="activity-journal-list">
+            {discoveries.map((item, i) => (
+              <li key={i} className="activity-journal-list-item">
+                <Lightbulb size={10} /> {String(item)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {done && doneReason && (
+        <div className="activity-journal-section activity-journal-done">
+          <span className="activity-journal-section-label">Done</span>
+          <p className="activity-journal-section-text">{doneReason}</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export const ActionItem = memo(function ActionItem({ call, result, isLast, repeatCount = 1 }) {
   const [expanded, setExpanded] = useState(false)
   const isDesktop = call?.type === 'task.request'
@@ -105,37 +177,49 @@ export const ActionItem = memo(function ActionItem({ call, result, isLast, repea
   const isJournal = toolName.toLowerCase().includes('journal')
   const isExecute =
     toolName === 'execute_code' || toolName.includes('execute') || toolName === 'run_code'
-  const label = isDesktop
-    ? toolName
-      ? `Desktop · ${toolName}`
-      : 'Desktop action'
-    : toolLabel(toolName)
+  let label
+  if (isJournal) {
+    const done = call?.args?.done === true
+    label = done ? 'Task complete' : 'Plan updated'
+  } else if (isDesktop) {
+    label = toolName ? `Desktop · ${toolName}` : 'Desktop action'
+  } else {
+    label = toolLabel(toolName)
+  }
 
   const argsObj = call?.args ?? parseToolArgs(call?.data?.payload ?? call?.data?.args ?? null)
   const argEntries = Object.entries(argsObj || {})
   const primaryEntry =
     argEntries.find(([k]) => PRIMARY_ARG_KEYS.includes(k)) || argEntries[0] || null
 
-  const toolSub = getToolSub(toolName, argsObj)
-  const sub =
-    toolSub ??
-    (primaryEntry
-      ? (() => {
-          const s =
-            typeof primaryEntry[1] === 'string' ? primaryEntry[1] : JSON.stringify(primaryEntry[1])
-          return s.length > 90 ? `${s.slice(0, 90)}…` : s
-        })()
-      : null)
+  let sub = null
+  if (isJournal) {
+    const plan = typeof argsObj?.currentPlan === 'string' ? argsObj.currentPlan : ''
+    if (plan) sub = plan.length > 90 ? `${plan.slice(0, 90)}…` : plan
+  } else {
+    const toolSub = getToolSub(toolName, argsObj)
+    sub =
+      toolSub ??
+      (primaryEntry
+        ? (() => {
+            const s =
+              typeof primaryEntry[1] === 'string' ? primaryEntry[1] : JSON.stringify(primaryEntry[1])
+            return s.length > 90 ? `${s.slice(0, 90)}…` : s
+          })()
+        : null)
+  }
 
   const toolResult = call?.type === 'task.request' ? null : result?.result
-  const outcome = getOutcomeBadge(toolName, toolResult)
+  const outcome = isJournal ? null : getOutcomeBadge(toolName, toolResult)
   const isFailure = outcome?.type === 'error' || outcome?.type === 'timeout'
-  const hasDetails = isExecute
+  const hasDetails = isJournal
     ? true
-    : argEntries.length > (primaryEntry ? 1 : 0) ||
-      (toolResult != null && typeof toolResult === 'string'
-        ? toolResult
-        : JSON.stringify(toolResult ?? ''))
+    : isExecute
+      ? true
+      : argEntries.length > (primaryEntry ? 1 : 0) ||
+        (toolResult != null && typeof toolResult === 'string'
+          ? toolResult
+          : JSON.stringify(toolResult ?? ''))
 
   return (
     <div
@@ -191,7 +275,9 @@ export const ActionItem = memo(function ActionItem({ call, result, isLast, repea
         </div>
         {sub && !expanded && <p className="activity-timeline-sub">{sub}</p>}
         {expanded &&
-          (isExecute ? (
+          (isJournal ? (
+            <JournalDetails argsObj={argsObj} />
+          ) : isExecute ? (
             <ExecuteCodeDetails argsObj={argsObj} result={toolResult} />
           ) : (
             <GenericDetails argEntries={argEntries} result={toolResult} />

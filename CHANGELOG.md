@@ -7,6 +7,25 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [2.1.0] - 2026-04-05
+
+### Fixed
+
+- **Agent planning loop** — removed `toolChoice: 'required'` and journal-only tool restriction during planning phase. All tools now available from iteration 1 with `toolChoice: 'auto'`, matching server behavior. Planning is prompt-guided, not structurally enforced. Eliminates the loop where Qwen called `update_journal` repeatedly because it was the only tool available.
+- **Consecutive journal cap** — agent runner tracks consecutive `update_journal` calls with no real tool between them. After 3 in a row, injects a correction nudge.
+- **`getExitCode(undefined)` crash** — `buildTimeline` could pass `undefined` to `getExitCode` when a tool call had no matched result. Changed strict `=== null` to loose `== null` to handle both.
+- **`useActivityCache` loose `||` operators** — `data.name || null` and `data.result || null` replaced with explicit type checks so empty strings and `0` values are preserved.
+- **Activity timeline type safety** — replaced all `||`/`??` fallback chains with a single `normalizeEvent()` function that uses explicit `typeof` checks to guarantee shape once at the boundary.
+- **Journal activity deduplication** — consecutive journal entries with identical plan text collapse with `×N` badge instead of rendering separately.
+
+### Changed
+
+- **Rich journal rendering** — journal activity events now carry full journal data (`understanding`, `currentPlan`, `completed[]`, `blockers[]`, `discoveries[]`, `done`, `doneReason`). New `JournalDetails` component renders structured sections with icons instead of raw key-value dump.
+- **Unified activity timeline** — removed separate `kind: 'action' | 'journal'` discriminator. All timeline entries render through `ActionItem`. Journal entries show as "Plan updated" or "Task complete" with expandable detail.
+- **Removed dead code** — `tryParseJournalJson`, `JOURNAL_KEYS`, `MAX_PLANNING_ITERATIONS`, `planningIterations` counter removed from agent runner.
+
+---
+
 ## [2.0.0] - 2026-04-05
 
 ### Fixed
