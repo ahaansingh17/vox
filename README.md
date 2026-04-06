@@ -19,6 +19,25 @@ Most AI assistants give you a chat box. Vox gives you an agent. You talk to it, 
   <img src="vids/vox-demo.gif" alt="Vox app demo" width="720" />
 </p>
 
+## Screenshots
+
+A few product views directly in the README. The full rotating gallery lives on [vox-ai.chat](https://www.vox-ai.chat).
+
+<p align="center"><strong>Overlay</strong></p>
+<p align="center">
+  <img src="screens/email-reply-overlay.webp" alt="Vox replying to emails in the overlay" height="220" />
+</p>
+
+<p align="center"><strong>Activity timeline</strong></p>
+<p align="center">
+  <img src="screens/activity-timeline.webp" alt="Activity timeline showing agent steps" height="220" />
+</p>
+
+<p align="center"><strong>Model settings</strong></p>
+<p align="center">
+  <img src="screens/settings-models.webp" alt="Settings page with model selection" height="220" />
+</p>
+
 ---
 
 ## What it does
